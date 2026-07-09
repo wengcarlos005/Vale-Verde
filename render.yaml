@@ -1,5 +1,10 @@
 # Blueprint de deploy no Render (https://render.com).
-# Servidor Node persistente com WebSocket + disco para o SQLite.
+# Servidor Node persistente com WebSocket — funciona no plano FREE.
+#
+# OBS sobre salvar progresso: o plano free NÃO tem disco persistente, então o
+# SQLite (data/greenvale.db) é reiniciado a cada novo deploy ou quando o serviço
+# "dorme". Para salvar de verdade, descomente o bloco `disk` abaixo e suba o
+# serviço para um plano pago (Starter), OU use Railway/Fly (têm volume no free).
 services:
   - type: web
     name: vale-verde
@@ -10,7 +15,7 @@ services:
     envVars:
       - key: JWT_SECRET
         generateValue: true
-    disk:
-      name: data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
+    # disk:
+    #   name: data
+    #   mountPath: /opt/render/project/src/data
+    #   sizeGB: 1

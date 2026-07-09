@@ -13,11 +13,12 @@ Ou seja: o multiplayer simplesmente **não funciona no Vercel**. Use uma das op�
 ## ✅ Opção recomendada: Render (grátis, tem `render.yaml` pronto)
 
 1. Repositório **privado** no GitHub (obrigatório — ver seção de licença abaixo).
-2. Em [render.com](https://render.com) → **New** → **Blueprint** → conecte o repositório.
-   O `render.yaml` já configura tudo: build `npm install`, start `npm start`, `JWT_SECRET` gerado e um disco de 1 GB montado em `data/` para o SQLite.
-3. Deploy. A URL sai algo como `https://vale-verde.onrender.com`.
+2. Em [render.com](https://render.com), faça login com o GitHub.
+3. **New** → **Blueprint** → escolha o repositório `Vale-Verde`.
+   O `render.yaml` já configura tudo: build `npm install`, start `npm start`, `JWT_SECRET` gerado.
+4. **Apply** / **Create**. Em 1-3 min a URL sai como `https://vale-verde.onrender.com` — compartilhe com os amigos.
 
-> No plano free o serviço "dorme" após ~15 min sem acesso e demora ~30 s para acordar no primeiro jogador. Para evitar, use um plano pago pequeno.
+> **Plano free:** o serviço "dorme" após ~15 min sem acesso (o 1º jogador espera ~50 s para acordar) e **não salva o progresso** entre reinícios (sem disco no free). Dá para jogar numa sessão, mas a fazenda zera quando o serviço dorme. Para **salvar de verdade**: descomente o bloco `disk` no `render.yaml` e suba para o plano Starter (pago), **ou** use Railway/Fly (volume no free).
 
 ## ✅ Alternativa: Railway
 
