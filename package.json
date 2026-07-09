@@ -1,0 +1,23 @@
+{
+  "name": "greenvale",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vale Verde / Greenvale — fazenda co-op web para até 6 jogadores",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.11.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "phaser": "^3.90.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
+  }
+}

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vale Verde — Greenvale</title>
+<style>
+  :root {
+    --bg: #2e4a32; --panel: #f7e9c9; --panel-dark: #e0c68f; --border: #7a5230;
+    --text: #4a3520; --accent: #d97f38; --accent2: #5a8f3c; --danger: #b8442e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg) url('/assets/menu_bg.png');
+    background-size: 720px;
+    image-rendering: pixelated;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: var(--text);
+    overflow: hidden;
+  }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  .panel {
+    background: var(--panel); border: 4px solid var(--border); border-radius: 10px;
+    box-shadow: 0 6px 0 rgba(0,0,0,.35); padding: 24px; width: 340px; max-width: 92vw;
+    image-rendering: pixelated;
+  }
+  h1.logo { color: #fff; text-shadow: 3px 3px 0 rgba(0,0,0,.45); font-size: 42px; letter-spacing: 2px; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  h1.logo img { width: 52px; height: 52px; image-rendering: pixelated; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.35)); }
+  .subtitle { color: #fff; text-shadow: 1px 1px 0 rgba(0,0,0,.5); margin-bottom: 20px; font-size: 14px; }
+  #app-preview { width: 96px; height: 96px; image-rendering: pixelated; flex: 0 0 auto;
+    background: #bfdca4; border: 3px solid var(--border); border-radius: 8px; }
+  .app-row { display: flex; gap: 10px; margin-top: 14px; align-items: center; }
+  .app-row .opts { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+  .app-row label { margin: 0 0 1px; }
+  h2 { font-size: 18px; margin-bottom: 12px; }
+  label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 3px; }
+  input, select {
+    width: 100%; padding: 9px 10px; border: 3px solid var(--border); border-radius: 6px;
+    background: #fffbee; font-size: 14px; color: var(--text); outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  button {
+    cursor: pointer; border: 3px solid var(--border); border-radius: 8px; font-weight: 700;
+    background: var(--accent); color: #fff; padding: 10px 14px; font-size: 14px; width: 100%;
+    margin-top: 14px; box-shadow: 0 3px 0 rgba(0,0,0,.3); transition: transform .05s;
+  }
+  button:active { transform: translateY(2px); box-shadow: none; }
+  button.secondary { background: var(--panel-dark); color: var(--text); }
+  button.green { background: var(--accent2); }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button { margin: 0; width: auto; flex: 1; padding: 8px; background: var(--panel-dark); color: var(--text); }
+  .tabs button.active { background: var(--accent); color: #fff; }
+  .msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
+  .msg.error { color: var(--danger); font-weight: 600; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+
+  .farm-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    background: #fffbee; border: 3px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px;
+  }
+  .farm-item .info { font-size: 13px; }
+  .farm-item .info b { font-size: 15px; }
+  .farm-item button { width: auto; margin: 0; padding: 8px 14px; }
+  .lang-switch { position: fixed; top: 12px; right: 12px; width: auto; }
+  .lang-switch select { width: auto; padding: 6px 8px; }
+  .donate { margin-top: 16px; text-align: center; }
+  .donate a { color: #ffd97a; font-size: 13px; }
+  .topbar-note { color:#cfe3b8; font-size:12px; margin-top:14px; }
+  .ad-slot {
+    margin-top: 18px; width: 336px; max-width: 92vw; height: 60px; border: 2px dashed rgba(255,255,255,.35);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,.45); font-size: 11px;
+  }
+
+  /* ---- jogo ---- */
+  #screen-game { background: #1c2b1e; }
+  #game-container { position: absolute; inset: 0; }
+  #game-container canvas { image-rendering: pixelated; }
+  .hud { position: absolute; user-select: none; z-index: 10; }
+  #hud-clock {
+    top: 10px; right: 10px; background: var(--panel); border: 3px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font-size: 14px; font-weight: 700; text-align: right; line-height: 1.5;
+  }
+  #hud-energy { bottom: 12px; right: 12px; width: 26px; height: 140px; background: var(--panel); border: 3px solid var(--border); border-radius: 6px; overflow: hidden; display: flex; align-items: flex-end; }
+  #hud-energy .fill { width: 100%; background: linear-gradient(#ffe36e, #e8a33d); }
+  #hotbar { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+  .slot {
+    width: 48px; height: 48px; background: var(--panel); border: 3px solid var(--border); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; font-size: 22px;
+  }
+  .slot.active { border-color: #ffd97a; box-shadow: 0 0 0 2px #ffd97a; }
+  .slot .qty { position: absolute; bottom: 1px; right: 3px; font-size: 11px; font-weight: 700; }
+  .slot .key { position: absolute; top: 0px; left: 3px; font-size: 9px; opacity: .6; }
+  .slot img { width: 32px; height: 32px; image-rendering: pixelated; }
+
+  #chat { left: 10px; bottom: 12px; width: 260px; display: flex; flex-direction: column; gap: 4px; }
+  #chat-log { max-height: 140px; overflow-y: auto; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+  #chat-log div { background: rgba(0,0,0,.45); color: #fff; border-radius: 6px; padding: 3px 8px; width: fit-content; max-width: 100%; word-wrap: break-word; }
+  #chat-log b { color: #ffd97a; }
+  #chat input { background: rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.25); color: #fff; font-size: 12px; padding: 6px 8px; }
+  #chat input::placeholder { color: rgba(255,255,255,.4); }
+
+  .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .modal-back.open { display: flex; }
+  .modal { max-height: 84vh; overflow-y: auto; width: 420px; }
+  .shop-item { display: flex; align-items: center; gap: 10px; background: #fffbee; border: 3px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; }
+  .shop-item .grow { flex: 1; }
+  .shop-item button { width: auto; margin: 0; padding: 6px 12px; font-size: 12px; }
+  .shop-item img { width: 28px; height: 28px; image-rendering: pixelated; }
+
+  #toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 40;
+    background: var(--danger); color: #fff; font-weight: 700; font-size: 13px; padding: 8px 16px;
+    border-radius: 8px; display: none; }
+  #sleep-overlay { position: fixed; inset: 0; background: rgba(5,10,20,.85); z-index: 30; display: none;
+    align-items: center; justify-content: center; flex-direction: column; color: #fff; text-align: center; }
+  #sleep-overlay h2 { color: #ffd97a; font-size: 26px; margin-bottom: 12px; }
+  #sleep-overlay .details { font-size: 14px; line-height: 1.8; }
+  #sleep-overlay button { width: auto; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<div class="lang-switch">
+  <select id="lang-select">
+    <option value="pt-BR">🇧🇷 Português</option>
+    <option value="en">🇺🇸 English</option>
+  </select>
+</div>
+
+<!-- LOGIN / REGISTRO -->
+<div class="screen active" id="screen-auth">
+  <h1 class="logo"><img src="/assets/icons/item_turnip.png" alt="">Vale Verde</h1>
+  <div class="subtitle" data-i18n="tagline"></div>
+  <div class="panel">
+    <div class="tabs">
+      <button id="tab-login" class="active" data-i18n="auth.login"></button>
+      <button id="tab-register" data-i18n="auth.register"></button>
+    </div>
+    <form id="form-auth">
+      <div id="field-name" style="display:none">
+        <label data-i18n="auth.name"></label>
+        <input id="auth-name" maxlength="16" autocomplete="nickname">
+      </div>
+      <label data-i18n="auth.email"></label>
+      <input id="auth-email" type="email" autocomplete="email">
+      <label data-i18n="auth.password"></label>
+      <input id="auth-password" type="password" autocomplete="current-password">
+      <button type="submit" id="auth-submit" data-i18n="auth.login"></button>
+      <div class="msg" id="auth-msg"></div>
+    </form>
+  </div>
+  <div class="donate"><a href="#" id="donate-link" target="_blank" rel="noopener" data-i18n="donate"></a></div>
+  <div class="ad-slot" data-i18n="adPlaceholder"></div>
+</div>
+
+<!-- LOBBY DE FAZENDAS -->
+<div class="screen" id="screen-farms">
+  <h1 class="logo"><img src="/assets/icons/item_turnip.png" alt="">Vale Verde</h1>
+  <div class="subtitle" id="farms-welcome"></div>
+  <div class="panel">
+    <h2 data-i18n="farms.mine"></h2>
+    <div id="farm-list"></div>
+    <div class="msg" id="farms-msg"></div>
+    <div class="row">
+      <button class="green" id="btn-new-farm" data-i18n="farms.create"></button>
+      <button class="secondary" id="btn-join-farm" data-i18n="farms.join"></button>
+    </div>
+    <div id="row-new-farm" style="display:none">
+      <label data-i18n="farms.namePrompt"></label>
+      <div class="row">
+        <input id="new-farm-name" maxlength="24">
+        <button class="green" id="confirm-new-farm" style="margin-top:0;flex:0 0 auto;width:auto">OK</button>
+      </div>
+    </div>
+    <div id="row-join-farm" style="display:none">
+      <label data-i18n="farms.codePrompt"></label>
+      <div class="row">
+        <input id="join-farm-code" maxlength="8" placeholder="VV-ABCD">
+        <button class="green" id="confirm-join-farm" style="margin-top:0;flex:0 0 auto;width:auto">OK</button>
+      </div>
+    </div>
+    <div class="app-row">
+      <canvas id="app-preview" width="48" height="48"></canvas>
+      <div class="opts">
+        <div><label data-i18n="app.hair"></label><select id="app-hair"></select></div>
+        <div><label data-i18n="app.hairColor"></label><select id="app-hair-color"></select></div>
+        <div><label data-i18n="app.shirt"></label><select id="app-shirt"></select></div>
+        <div><label data-i18n="app.pants"></label><select id="app-pants"></select></div>
+      </div>
+    </div>
+    <button class="secondary" id="btn-logout" data-i18n="auth.logout"></button>
+  </div>
+  <div class="topbar-note" data-i18n="farms.hint"></div>
+</div>
+
+<!-- JOGO -->
+<div class="screen" id="screen-game">
+  <div id="game-container"></div>
+  <div class="hud" id="hud-clock"></div>
+  <div class="hud" id="hud-energy"><div class="fill" style="height:100%"></div></div>
+  <div class="hud" id="hotbar"></div>
+  <div class="hud" id="chat">
+    <div id="chat-log"></div>
+    <input id="chat-input" maxlength="200" data-i18n-placeholder="chat.placeholder">
+  </div>
+</div>
+
+<!-- MODAIS -->
+<div class="modal-back" id="modal-shop">
+  <div class="panel modal">
+    <h2 data-i18n="shop.title"></h2>
+    <div style="font-size:13px;margin-bottom:10px" id="shop-money"></div>
+    <div id="shop-items"></div>
+    <button class="secondary" data-close data-i18n="close"></button>
+  </div>
+</div>
+<div class="modal-back" id="modal-bin">
+  <div class="panel modal">
+    <h2 data-i18n="bin.title"></h2>
+    <div style="font-size:12px;margin-bottom:10px" data-i18n="bin.hint"></div>
+    <div id="bin-sell-items"></div>
+    <h2 style="margin-top:10px;font-size:14px" data-i18n="bin.content"></h2>
+    <div id="bin-content" style="font-size:13px"></div>
+    <button class="secondary" data-close data-i18n="close"></button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="sleep-overlay">
+  <h2 data-i18n="sleep.title"></h2>
+  <div class="details" id="sleep-details"></div>
+  <button class="secondary" id="btn-cancel-sleep" data-i18n="sleep.cancel"></button>
+</div>
+
+<script src="/vendor/phaser.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,913 @@
+// Cena principal do jogo (Phaser 3) — renderização do mundo, movimento com
+// predição local, jogadores remotos, ações de fazenda e interações.
+import { connect } from './net.js';
+import { Hud, TOOLS } from './hud.js';
+import { t } from './i18n.js';
+
+const CROP_ORDER = ['turnip', 'potato', 'carrot', 'strawberry', 'tomato', 'corn', 'pepper', 'onion', 'cabbage', 'beet'];
+export const HAIR_COLORS = ['black', 'blonde', 'brown', 'ginger', 'grey'];
+export const OUTFIT_COLORS = ['black', 'blue', 'green', 'orange', 'pink', 'purple', 'red', 'white_and_brown'];
+
+const T = 16;                       // tile
+const SPEED = 95;                   // px/s
+const ROWS = { idle: { down: 0, right: 1, up: 2 }, walk: { down: 3, right: 4, up: 5 }, act: { down: 6, right: 7, up: 8 } };
+const FRAMES_PER = { idle: 6, walk: 6, act: 4 };
+const SHEET_COLS = 9;
+
+function defaultAppearance(userId) {
+  const saved = localStorage.getItem('gv_appearance');
+  if (saved) { try { return JSON.parse(saved); } catch {} }
+  return {
+    hair: 1 + (userId % 6),
+    hairColor: HAIR_COLORS[userId % HAIR_COLORS.length],
+    shirt: OUTFIT_COLORS[(userId * 3) % OUTFIT_COLORS.length],
+    pants: OUTFIT_COLORS[(userId * 5 + 1) % OUTFIT_COLORS.length],
+  };
+}
+
+let game = null;
+
+export function startGame(farm) {
+  const socket = connect(farm.id);
+  socket.on('connect_error', (e) => console.error('[greenvale] connect_error', e.message));
+  socket.once('joined', (data) => {
+    window.gvBoot = 'joined';
+    if (game) { game.destroy(true); game = null; }
+    game = new Phaser.Game({
+      type: Phaser.AUTO,
+      parent: 'game-container',
+      backgroundColor: '#1c2b1e',
+      pixelArt: true,
+      roundPixels: true,
+      scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
+      scene: new GameScene(socket, data),
+    });
+    window.gvGame = game;
+  });
+}
+
+class GameScene extends Phaser.Scene {
+  constructor(socket, data) {
+    super('game');
+    this.socket = socket;
+    this.data0 = data;
+  }
+
+  // ---------------- assets ----------------
+  preload() {
+    const L = this.load;
+    L.spritesheet('grass', '/assets/grass.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('water', '/assets/water.png', { frameWidth: T, frameHeight: T });
+    L.image('path', '/assets/path.png');
+    L.spritesheet('tilled', '/assets/tilled.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('tilled_wet', '/assets/tilled_wet.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('crops', '/assets/crops_stages.png', { frameWidth: T, frameHeight: 32 });
+    L.image('crop_dead', '/assets/crop_dead.png');
+    L.spritesheet('tree', '/assets/tree.png', { frameWidth: 32, frameHeight: 48 });
+    L.spritesheet('tree_birch', '/assets/tree_birch.png', { frameWidth: 32, frameHeight: 48 });
+    L.image('stump', '/assets/stump.png');
+    L.spritesheet('bushes', '/assets/bushes.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('fence', '/assets/fence.png', { frameWidth: T, frameHeight: T });
+    L.image('well', '/assets/well.png');
+    L.image('coop', '/assets/coop.png');
+    L.image('egg', '/assets/egg.png');
+    for (const tl of ['hoe', 'can', 'axe', 'pickaxe']) L.image(`tool_${tl}`, `/assets/icons/tool_${tl}.png`);
+    L.spritesheet('chicken', '/assets/chicken.png', { frameWidth: 32, frameHeight: 32 });
+    L.spritesheet('rock', '/assets/rock.png', { frameWidth: 32, frameHeight: 32 });
+    L.image('bin', '/assets/bin.png');
+    L.image('house', '/assets/house.png');
+    L.image('shop', '/assets/shop.png');
+    L.spritesheet('bob', '/assets/bob.png', { frameWidth: 64, frameHeight: 64 });
+    L.image('cursor', '/assets/cursor.png');
+    L.spritesheet('gtiles', '/assets/grass_tiles.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('dirt_fringe', '/assets/dirt_fringe.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('decor_grass', '/assets/decor_grass.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('decor_mushroom', '/assets/decor_mushroom.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('decor_cattail', '/assets/decor_cattail.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('decor_lily', '/assets/decor_lily.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('butterfly', '/assets/butterfly.png', { frameWidth: T, frameHeight: T });
+
+    L.spritesheet('p_base', '/assets/player/base.png', { frameWidth: 64, frameHeight: 64 });
+    for (let s = 1; s <= 6; s++) for (const c of HAIR_COLORS)
+      L.spritesheet(`p_hair_${s}_${c}`, `/assets/player/hair_${s}_${c}.png`, { frameWidth: 64, frameHeight: 64 });
+    for (const c of OUTFIT_COLORS) {
+      L.spritesheet(`p_shirt_${c}`, `/assets/player/shirt_${c}.png`, { frameWidth: 64, frameHeight: 64 });
+      L.spritesheet(`p_pants_${c}`, `/assets/player/pants_${c}.png`, { frameWidth: 64, frameHeight: 64 });
+    }
+  }
+
+  makeLayerAnims(key) {
+    if (this.anims.exists(`${key}_idle_down`)) return;
+    for (const [type, dirs] of Object.entries(ROWS)) {
+      for (const [dir, row] of Object.entries(dirs)) {
+        this.anims.create({
+          key: `${key}_${type}_${dir}`,
+          frames: this.anims.generateFrameNumbers(key, {
+            start: row * SHEET_COLS, end: row * SHEET_COLS + FRAMES_PER[type] - 1,
+          }),
+          frameRate: type === 'act' ? 10 : 7,
+          repeat: type === 'act' ? 0 : -1,
+        });
+      }
+    }
+  }
+
+  // ---------------- criação ----------------
+  create() {
+    window.gvBoot = 'create';
+    const d = this.data0;
+    this.world = d.world;
+    this.crops = d.crops;
+    this.tilesState = d.state.tiles;
+    this.objectsState = d.state.objects;
+    this.me = d.you.userId;
+    this.players = new Map();       // userId -> {container, sprites, target, dir, anim, name}
+    this.tileSprites = new Map();   // "x,y" -> {overlay, crop}
+    this.objectSprites = new Map();
+
+    this.hud = new Hud({
+      sendChat: (txt) => this.socket.emit('chat', txt),
+      buy: (crop, qty) => this.socket.emit('buy', { crop, qty }),
+      buyAnimal: () => this.socket.emit('buyAnimal'),
+      sell: (item, qty) => this.socket.emit('sell', { item, qty }),
+      cancelSleep: () => { this.socket.emit('sleep', false); this.hud.hideSleep(); },
+    });
+    this.hud.crops = this.crops;
+    this.hud.setInv(d.you.inv);
+    this.hud.setMoney(d.state.money);
+    this.hud.setBin(d.state.bin);
+    this.serverTime = d.state.time;
+    this.serverTimeAt = performance.now();
+    this.hud.setTime(d.state);
+
+    // anims compartilhadas (antes de spawnar qualquer objeto)
+    this.anims.create({ key: 'water_flow', frames: this.anims.generateFrameNumbers('water', { start: 0, end: 7 }), frameRate: 4, repeat: -1 });
+    this.anims.create({ key: 'tree_sway', frames: this.anims.generateFrameNumbers('tree', { start: 0, end: 1 }), frameRate: 2, repeat: -1 });
+    this.anims.create({ key: 'birch_sway', frames: this.anims.generateFrameNumbers('tree_birch', { start: 0, end: 1 }), frameRate: 2, repeat: -1 });
+    this.anims.create({ key: 'bob_idle', frames: this.anims.generateFrameNumbers('bob', { start: 0, end: 5 }), frameRate: 5, repeat: -1 });
+    this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly', { start: 0, end: 3 }), frameRate: 10, repeat: -1 });
+    // galinha: linha 0 idle (0-1), linha 1 anda p/ baixo (8-13), linha 2 lado (16-21), linha 3 cima (24-29)
+    this.anims.create({ key: 'chicken_idle', frames: this.anims.generateFrameNumbers('chicken', { start: 0, end: 1 }), frameRate: 3, repeat: -1 });
+    this.anims.create({ key: 'chicken_down', frames: this.anims.generateFrameNumbers('chicken', { start: 8, end: 13 }), frameRate: 8, repeat: -1 });
+    this.anims.create({ key: 'chicken_side', frames: this.anims.generateFrameNumbers('chicken', { start: 16, end: 21 }), frameRate: 8, repeat: -1 });
+    this.anims.create({ key: 'chicken_up', frames: this.anims.generateFrameNumbers('chicken', { start: 24, end: 29 }), frameRate: 8, repeat: -1 });
+    for (const [key, rows] of [['decor_grass', 18], ['decor_mushroom', 8], ['decor_cattail', 5], ['decor_lily', 6]]) {
+      for (let r = 0; r < rows; r++) {
+        this.anims.create({ key: `${key}_${r}`, frames: this.anims.generateFrameNumbers(key, { start: r * 8, end: r * 8 + 7 }), frameRate: 6, repeat: -1 });
+      }
+    }
+
+    this.buildGround();
+    this.buildDecor();
+    this.buildBuildings();
+    for (const [key, obj] of Object.entries(this.objectsState)) this.spawnObject(key, obj);
+    for (const [key, tile] of Object.entries(this.tilesState)) this.updateTile(key, tile);
+
+    // animais e ovos
+    this.eggSprites = new Map();
+    this.chickens = new Map();
+    this.setEggs(d.state.eggs || {});
+    this.setAnimals(d.state.animals || []);
+
+    this.waterSprites.forEach(s => s.play({ key: 'water_flow', startFrame: Phaser.Math.Between(0, 7) }));
+    this.bob.play('bob_idle');
+
+    // jogadores
+    for (const p of d.players) this.addPlayer(p);
+    const meP = this.players.get(this.me);
+
+    // aparência local
+    const app = defaultAppearance(this.me);
+    this.socket.emit('appearance', app);
+    this.rebuildPlayerLayers(this.me, app);
+
+    // câmera
+    this.cameras.main.setBounds(0, 0, this.world.width * T, this.world.height * T);
+    const zoom = Math.max(2, Math.min(4, Math.round(Math.min(window.innerWidth, window.innerHeight * 1.6) / 320)));
+    this.cameras.main.setZoom(zoom);
+    this.cameras.main.startFollow(meP.container, true, 0.15, 0.15);
+
+    // tint noturno
+    this.nightRect = this.add.rectangle(0, 0, 4000, 4000, 0x0a1030).setOrigin(0).setScrollFactor(0).setDepth(99999).setAlpha(0);
+
+    // cursor de tile
+    this.cursor = this.add.image(0, 0, 'cursor').setOrigin(0).setDepth(90000).setVisible(false);
+    this.hintText = this.add.text(0, 0, '', {
+      fontSize: '8px', fontFamily: 'sans-serif', color: '#fff',
+      backgroundColor: 'rgba(0,0,0,.55)', padding: { x: 3, y: 2 }, resolution: 6,
+    }).setOrigin(0.5, 1).setDepth(95000).setVisible(false);
+
+    this.bindInput();
+    this.bindSocket();
+    window.gvScene = this; // handle para debug/testes
+    this.moveAccum = 0;
+    this.lastSent = { x: 0, y: 0, dir: '', anim: '' };
+  }
+
+  buildGround() {
+    const g = this.world.ground;
+    const W_ = this.world.width, H_ = this.world.height;
+    const at = (x, y, v) => x >= 0 && y >= 0 && x < W_ && y < H_ && g[y][x] === v;
+    const rt = this.add.renderTexture(0, 0, W_ * T, H_ * T).setOrigin(0).setDepth(-10);
+    const rimRt = this.add.renderTexture(0, 0, W_ * T, H_ * T).setOrigin(0).setDepth(-4);
+    this.waterSprites = [];
+
+    // Moldura do caminho: peças de franja MASCARADAS (só a banda de transição tem
+    // pixels; o resto é transparente), então sobreposições em tiles finos/isolados
+    // não se apagam. Frames de dirt_fringe: 0 n, 1 s, 2 w, 3 e, 4 nw, 5 ne, 6 sw, 7 se.
+    const drawDirt = (x, y) => {
+      const X = x * T, Y = y * T;
+      rt.drawFrame('gtiles', 97, X, Y); // base de areia
+      const n = !at(x, y - 1, 2) && !at(x, y - 1, 1), s = !at(x, y + 1, 2) && !at(x, y + 1, 1);
+      const w = !at(x - 1, y, 2) && !at(x - 1, y, 1), e = !at(x + 1, y, 2) && !at(x + 1, y, 1);
+      const nw = !at(x - 1, y - 1, 2) && !at(x - 1, y - 1, 1), ne = !at(x + 1, y - 1, 2) && !at(x + 1, y - 1, 1);
+      const sw = !at(x - 1, y + 1, 2) && !at(x - 1, y + 1, 1), se = !at(x + 1, y + 1, 2) && !at(x + 1, y + 1, 1);
+      if (n) rt.drawFrame('dirt_fringe', 0, X, Y);
+      if (s) rt.drawFrame('dirt_fringe', 1, X, Y);
+      if (w) rt.drawFrame('dirt_fringe', 2, X, Y);
+      if (e) rt.drawFrame('dirt_fringe', 3, X, Y);
+      // cantos externos (convexos) quando as duas bordas são grama;
+      // cantos internos (côncavos) quando só a diagonal é grama.
+      if (n && w) rt.drawFrame('dirt_fringe', 4, X, Y);
+      else if (!n && !w && nw) rt.drawFrame('dirt_fringe', 8, X, Y);
+      if (n && e) rt.drawFrame('dirt_fringe', 5, X, Y);
+      else if (!n && !e && ne) rt.drawFrame('dirt_fringe', 9, X, Y);
+      if (s && w) rt.drawFrame('dirt_fringe', 6, X, Y);
+      else if (!s && !w && sw) rt.drawFrame('dirt_fringe', 10, X, Y);
+      if (s && e) rt.drawFrame('dirt_fringe', 7, X, Y);
+      else if (!s && !e && se) rt.drawFrame('dirt_fringe', 11, X, Y);
+    };
+    // borda do lago (buraco d'água no tileset: 0 TL, 1 T, 2 TR / 16 L, 17 água, 18 R / 32 BL, 33 B, 34 BR)
+    const pondFrame = (x, y) => {
+      const n = at(x, y - 1, 1), e = at(x + 1, y, 1), s = at(x, y + 1, 1), w = at(x - 1, y, 1);
+      if (n && e && s && w) return 17;
+      if (!n && !w) return 0;
+      if (!n && !e) return 2;
+      if (!s && !w) return 32;
+      if (!s && !e) return 34;
+      if (!n) return 1;
+      if (!s) return 33;
+      if (!w) return 16;
+      if (!e) return 18;
+      return 17;
+    };
+
+    for (let y = 0; y < H_; y++) {
+      for (let x = 0; x < W_; x++) {
+        const v = g[y][x];
+        rt.drawFrame('grass', 0, x * T, y * T);
+        if (v === 2) {
+          drawDirt(x, y);
+        } else if (v === 1) {
+          this.waterSprites.push(this.add.sprite(x * T, y * T, 'water', 0).setOrigin(0).setDepth(-6));
+          const f = pondFrame(x, y);
+          if (f !== 17) rimRt.drawFrame('gtiles', f, x * T, y * T);
+        }
+      }
+    }
+  }
+
+  // Decoração determinística (mesma para todos os jogadores da fazenda)
+  buildDecor() {
+    let seed = (this.data0.farm.id * 2654435761) >>> 0;
+    const rnd = () => {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const g = this.world.ground;
+    const W_ = this.world.width, H_ = this.world.height;
+    const nearBuilding = (x, y) => this.world.buildings.some(b => x >= b.x - 1 && x < b.x + b.w + 1 && y >= b.y - 4 && y < b.y + b.h + 1);
+    const grassTile = (x, y) => g[y][x] === 0 && !nearBuilding(x, y);
+
+    // tufos de grama e flores espalhados
+    for (let i = 0; i < 380; i++) {
+      const x = Math.floor(rnd() * W_), y = Math.floor(rnd() * H_);
+      if (!grassTile(x, y)) continue;
+      const row = Math.floor(rnd() * 18);
+      this.add.sprite(x * T, y * T, 'decor_grass', row * 8).setOrigin(0).setDepth(-5)
+        .play({ key: `decor_grass_${row}`, startFrame: Math.floor(rnd() * 8) });
+    }
+    // cogumelos perto das bordas do mapa
+    for (let i = 0; i < 40; i++) {
+      const x = Math.floor(rnd() * W_), y = Math.floor(rnd() * H_);
+      if (!grassTile(x, y)) continue;
+      if (x > 6 && x < W_ - 7 && y > 6 && y < H_ - 7) continue;
+      const row = Math.floor(rnd() * 8);
+      this.add.sprite(x * T, y * T, 'decor_mushroom', row * 8).setOrigin(0).setDepth(-5)
+        .play({ key: `decor_mushroom_${row}`, startFrame: Math.floor(rnd() * 8) });
+    }
+    // taboas na margem do lago e vitórias-régias na água
+    const waterTiles = [], rimTiles = [];
+    for (let y = 1; y < H_ - 1; y++) for (let x = 1; x < W_ - 1; x++) {
+      if (g[y][x] !== 1) continue;
+      const edge = g[y - 1][x] !== 1 || g[y + 1][x] !== 1 || g[y][x - 1] !== 1 || g[y][x + 1] !== 1;
+      (edge ? rimTiles : waterTiles).push([x, y]);
+    }
+    for (let i = 0; i < 10 && rimTiles.length; i++) {
+      const [x, y] = rimTiles.splice(Math.floor(rnd() * rimTiles.length), 1)[0];
+      const row = Math.floor(rnd() * 5);
+      this.add.sprite(x * T, y * T, 'decor_cattail', row * 8).setOrigin(0).setDepth(y * T + T)
+        .play({ key: `decor_cattail_${row}`, startFrame: Math.floor(rnd() * 8) });
+    }
+    for (let i = 0; i < 9 && waterTiles.length; i++) {
+      const [x, y] = waterTiles.splice(Math.floor(rnd() * waterTiles.length), 1)[0];
+      const row = Math.floor(rnd() * 6);
+      this.add.sprite(x * T, y * T, 'decor_lily', row * 8).setOrigin(0).setDepth(-4)
+        .play({ key: `decor_lily_${row}`, startFrame: Math.floor(rnd() * 8) });
+    }
+    // borboletas passeando
+    this.butterflies = [];
+    for (let i = 0; i < 4; i++) {
+      const s = this.add.sprite(rnd() * W_ * T, rnd() * H_ * T, 'butterfly', 0).setDepth(5000).play('butterfly_fly');
+      this.butterflies.push({ s, tx: rnd() * W_ * T, ty: rnd() * H_ * T, phase: rnd() * 6 });
+    }
+  }
+
+  buildBuildings() {
+    this.doors = {};
+    for (const b of this.world.buildings) {
+      const bx = b.x * T, by = (b.y + b.h) * T;
+      if (b.type === 'house') this.add.image(bx, by, 'house').setOrigin(0, 1).setDepth(by - 1);
+      else if (b.type === 'shop') this.add.image(bx, by, 'shop').setOrigin(0, 1).setDepth(by - 1);
+      else if (b.type === 'bin') this.add.image(bx + T / 2, by, 'bin').setOrigin(0.5, 1).setScale(1.4).setDepth(by - 1);
+      else if (b.type === 'well') this.add.image(bx, by, 'well').setOrigin(0, 1).setDepth(by - 1);
+      else if (b.type === 'coop') this.add.image(bx, by, 'coop').setOrigin(0, 1).setDepth(by - 1);
+      // só portas interativas geram dica/atalho E
+      if (b.door && ['house', 'shop', 'bin'].includes(b.type)) {
+        this.doors[b.type] = { x: b.door[0], y: b.door[1] + 1 };
+      }
+    }
+    const shop = this.world.buildings.find(b => b.type === 'shop');
+    this.bob = this.add.sprite((shop.x + shop.w) * T - 8, (shop.y + shop.h) * T + 14, 'bob')
+      .setOrigin(0.5, 0.8).setDepth((shop.y + shop.h) * T + 14);
+  }
+
+  // ---------------- jogadores ----------------
+  addPlayer(p) {
+    if (this.players.has(p.userId)) this.removePlayer(p.userId);
+    const container = this.add.container(p.x, p.y);
+    container.setDepth(p.y);
+    const label = this.add.text(0, -30, p.name, {
+      fontSize: '8px', fontFamily: 'sans-serif', color: '#fff',
+      stroke: '#000', strokeThickness: 2, resolution: 6,
+    }).setOrigin(0.5, 1);
+    container.add(label);
+    const entry = {
+      container, label, sprites: [], userId: p.userId, name: p.name,
+      target: { x: p.x, y: p.y }, dir: p.dir || 'down', anim: p.anim || 'idle',
+    };
+    this.players.set(p.userId, entry);
+    this.rebuildPlayerLayers(p.userId, p.appearance || defaultAppearance(p.userId));
+    return entry;
+  }
+
+  rebuildPlayerLayers(userId, app) {
+    const e = this.players.get(userId);
+    if (!e) return;
+    for (const s of e.sprites) s.destroy();
+    e.sprites = [];
+    const hair = Math.min(6, Math.max(1, app.hair || 1));
+    const hc = HAIR_COLORS.includes(app.hairColor) ? app.hairColor : 'brown';
+    const sc = OUTFIT_COLORS.includes(app.shirt) ? app.shirt : 'blue';
+    const pc = OUTFIT_COLORS.includes(app.pants) ? app.pants : 'black';
+    const keys = ['p_base', `p_pants_${pc}`, `p_shirt_${sc}`, `p_hair_${hair}_${hc}`];
+    for (const key of keys) {
+      if (!this.textures.exists(key)) continue;
+      this.makeLayerAnims(key);
+      // origem nos pés reais do personagem (y≈40/64) para colisão e profundidade baterem com o visual
+      const s = this.add.sprite(0, 0, key, 0).setOrigin(0.5, 0.64);
+      e.container.addAt(s, e.container.length - 1); // label fica por cima
+      e.sprites.push(s);
+    }
+    this.playAnim(e, e.anim, e.dir);
+  }
+
+  playAnim(entry, anim, dir, once = false) {
+    entry.anim = anim; entry.dir = dir;
+    const flip = dir === 'left';
+    const d = dir === 'left' ? 'right' : dir;
+    entry.sprites.forEach((s, i) => {
+      s.setFlipX(flip);
+      const key = `${s.texture.key}_${anim}_${d}`;
+      if (once) {
+        s.play(key);
+        // ao terminar a ação, volta para idle (senão o estado 'act' trava as animações)
+        if (i === 0) s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+          if (entry.anim === 'act') this.playAnim(entry, 'idle', entry.dir);
+        });
+      } else if (s.anims.currentAnim?.key !== key || !s.anims.isPlaying) {
+        s.play(key);
+      }
+    });
+  }
+
+  removePlayer(userId) {
+    const e = this.players.get(userId);
+    if (!e) return;
+    e.container.destroy();
+    this.players.delete(userId);
+  }
+
+  // ---------------- mundo mutável ----------------
+  spawnObject(key, obj) {
+    this.despawnObject(key);
+    const [x, y] = key.split(',').map(Number);
+    const cx = x * T + T / 2, by = y * T + T;
+    let sprite;
+    if (obj.type === 'tree') {
+      const birch = obj.variant === 'birch';
+      sprite = this.add.sprite(cx, by, birch ? 'tree_birch' : 'tree', 0).setOrigin(0.5, 1).setDepth(by);
+      sprite.play({ key: birch ? 'birch_sway' : 'tree_sway', startFrame: Phaser.Math.Between(0, 1), delay: Phaser.Math.Between(0, 500) });
+    } else if (obj.type === 'rock') {
+      sprite = this.add.sprite(cx, by, 'rock', 0).setOrigin(0.5, 1).setDepth(by);
+    } else if (obj.type === 'bush') {
+      sprite = this.add.image(cx, by, 'bushes', (x * 7 + y * 13) % 5).setOrigin(0.5, 1).setDepth(by);
+    } else if (obj.type === 'stump') {
+      sprite = this.add.image(cx, by, 'stump').setOrigin(0.5, 1).setDepth(by);
+    } else if (obj.type === 'fence') {
+      // frame por vizinhança (grade 4x4: postes/retas/cantos/T/cruz)
+      const FENCE_MAP = [12, 8, 1, 13, 0, 4, 5, 9, 3, 15, 2, 14, 7, 11, 6, 10];
+      const f = (xx, yy) => this.objectsState[`${xx},${yy}`]?.type === 'fence' ? 1 : 0;
+      const mask = f(x, y - 1) | (f(x + 1, y) << 1) | (f(x, y + 1) << 2) | (f(x - 1, y) << 3);
+      sprite = this.add.image(x * T, y * T, 'fence', FENCE_MAP[mask]).setOrigin(0).setDepth(by);
+    } else {
+      sprite = this.add.image(cx, by, 'stump').setOrigin(0.5, 1).setDepth(by);
+    }
+    this.objectSprites.set(key, sprite);
+  }
+
+  despawnObject(key) {
+    const s = this.objectSprites.get(key);
+    if (s) { s.destroy(); this.objectSprites.delete(key); }
+  }
+
+  hitObject(key) {
+    const s = this.objectSprites.get(key);
+    if (!s) return;
+    this.tweens.add({ targets: s, angle: { from: -6, to: 0 }, duration: 140, ease: 'Sine.out' });
+  }
+
+  breakObject(key) {
+    const s = this.objectSprites.get(key);
+    if (!s) return;
+    this.objectSprites.delete(key);
+    this.tweens.add({
+      targets: s, alpha: 0, scaleX: 0.6, scaleY: 0.4, y: s.y + 4, duration: 260,
+      onComplete: () => s.destroy(),
+    });
+  }
+
+  // ---------------- animais e ovos ----------------
+  setEggs(eggs) {
+    for (const key of [...this.eggSprites.keys()]) if (!eggs[key]) this.setEgg(key, null);
+    for (const key of Object.keys(eggs)) if (!this.eggSprites.has(key)) this.setEgg(key, eggs[key]);
+    this.eggsState = eggs;
+  }
+
+  setEgg(key, egg) {
+    const cur = this.eggSprites.get(key);
+    if (egg) {
+      if (!cur) {
+        const [x, y] = key.split(',').map(Number);
+        const sp = this.add.image(x * T + T / 2, y * T + T - 3, 'egg').setOrigin(0.5, 1).setDepth(y * T + T - 2);
+        this.tweens.add({ targets: sp, y: sp.y - 2, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+        this.eggSprites.set(key, sp);
+      }
+    } else if (cur) {
+      cur.destroy();
+      this.eggSprites.delete(key);
+    }
+  }
+
+  setAnimals(animals) {
+    const ids = new Set(animals.map(a => a.id));
+    for (const [id, c] of this.chickens) if (!ids.has(id)) { c.sprite.destroy(); this.chickens.delete(id); }
+    for (const a of animals) {
+      if (this.chickens.has(a.id)) continue;
+      const sprite = this.add.sprite(a.hx, a.hy, 'chicken', 0).setOrigin(0.5, 0.85).setDepth(a.hy).play('chicken_idle');
+      this.chickens.set(a.id, { sprite, hx: a.hx, hy: a.hy, tx: a.hx, ty: a.hy, wait: 0, dir: 'down' });
+    }
+  }
+
+  updateChickens(dt) {
+    if (!this.chickens) return;
+    const now = this.time.now / 1000;
+    for (const c of this.chickens.values()) {
+      const dx = c.tx - c.sprite.x, dy = c.ty - c.sprite.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 2) {
+        c.wait -= dt;
+        if (c.sprite.anims.currentAnim?.key !== 'chicken_idle') c.sprite.play('chicken_idle');
+        if (c.wait <= 0) { // novo destino perto de casa
+          c.tx = c.hx + (Math.random() - 0.5) * 40;
+          c.ty = c.hy + (Math.random() - 0.5) * 32;
+          c.wait = 1 + Math.random() * 3;
+        }
+      } else {
+        const sp = 18;
+        c.sprite.x += (dx / dist) * sp * dt;
+        c.sprite.y += (dy / dist) * sp * dt;
+        c.sprite.setDepth(c.sprite.y);
+        const horiz = Math.abs(dx) > Math.abs(dy);
+        const key = horiz ? 'chicken_side' : (dy < 0 ? 'chicken_up' : 'chicken_down');
+        if (horiz) c.sprite.setFlipX(dx < 0);
+        if (c.sprite.anims.currentAnim?.key !== key) c.sprite.play(key);
+      }
+    }
+  }
+
+  updateTile(key, tile) {
+    if (tile) this.tilesState[key] = tile; else delete this.tilesState[key];
+    const [x, y] = key.split(',').map(Number);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) this.refreshTile(x + dx, y + dy);
+  }
+
+  // Autotile do solo arado. Bordas (N=1,E=2,S=4,W=8 vizinho presente) → blob 3x3/tiras;
+  // com os 4 vizinhos presentes, diagonais faltantes usam os tiles de canto interno (notch).
+  tilledFrame(x, y) {
+    const MAP = [0, 21, 1, 22, 7, 14, 8, 15, 3, 24, 2, 23, 10, 17, 9, 16];
+    // notch bits: NE=1, SE=2, SW=4, NW=8 (diagonal ausente entre vizinhos presentes)
+    const NOTCH = { 1: 31, 2: 26, 3: 27, 4: 25, 5: 49, 7: 32, 8: 28, 10: 50, 12: 34, 11: 35, 13: 38, 14: 33, 15: 43 };
+    const on = (xx, yy) => { const t = this.tilesState[`${xx},${yy}`]; return t && t.tilled ? 1 : 0; };
+    const n = on(x, y - 1), e = on(x + 1, y), s = on(x, y + 1), w = on(x - 1, y);
+    const mask = n | (e << 1) | (s << 2) | (w << 3);
+    if (mask === 15) {
+      const notches = (n && e && !on(x + 1, y - 1) ? 1 : 0) | (s && e && !on(x + 1, y + 1) ? 2 : 0)
+        | (s && w && !on(x - 1, y + 1) ? 4 : 0) | (n && w && !on(x - 1, y - 1) ? 8 : 0);
+      if (notches && NOTCH[notches] !== undefined) return NOTCH[notches];
+    }
+    return MAP[mask];
+  }
+
+  refreshTile(x, y) {
+    const key = `${x},${y}`;
+    const tile = this.tilesState[key];
+    let entry = this.tileSprites.get(key);
+    if (!entry) { entry = {}; this.tileSprites.set(key, entry); }
+
+    // solo arado
+    if (tile && tile.tilled) {
+      const tex = tile.watered ? 'tilled_wet' : 'tilled';
+      const frame = this.tilledFrame(x, y);
+      if (!entry.overlay) entry.overlay = this.add.image(x * T, y * T, tex, frame).setOrigin(0).setDepth(-3);
+      else entry.overlay.setTexture(tex, frame);
+    } else if (entry.overlay) { entry.overlay.destroy(); entry.overlay = null; }
+
+    // cultivo
+    if (tile && tile.crop) {
+      const frame = this.cropFrame(tile.crop);
+      if (tile.crop.dead) {
+        if (entry.crop) { if (entry.readyTween) { entry.readyTween.stop(); entry.readyTween = null; } entry.crop.destroy(); entry.crop = null; }
+        if (!entry.dead) entry.dead = this.add.image(x * T, y * T - T, 'crop_dead').setOrigin(0).setDepth(y * T + T - 1);
+      } else {
+        if (entry.dead) { entry.dead.destroy(); entry.dead = null; }
+        if (!entry.crop) entry.crop = this.add.image(x * T, y * T - T, 'crops', frame).setOrigin(0).setDepth(y * T + T - 1);
+        else entry.crop.setFrame(frame);
+        // pulinho + brilho quando pronto para colher, para o jogador saber que pode colher
+        const ready = tile.crop.daysGrown >= this.crops[tile.crop.id].days;
+        if (ready && !entry.readyTween) {
+          entry.crop.setY(y * T - T);
+          entry.readyTween = this.tweens.add({ targets: entry.crop, y: y * T - T - 2, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+        } else if (!ready && entry.readyTween) {
+          entry.readyTween.stop(); entry.readyTween = null; entry.crop.setY(y * T - T);
+        }
+      }
+    } else {
+      if (entry.crop) { if (entry.readyTween) { entry.readyTween.stop(); entry.readyTween = null; } entry.crop.destroy(); entry.crop = null; }
+      if (entry.dead) { entry.dead.destroy(); entry.dead = null; }
+    }
+    if (!entry.overlay && !entry.crop && !entry.dead) this.tileSprites.delete(key);
+  }
+
+  cropFrame(crop) {
+    const def = this.crops[crop.id];
+    const idx = CROP_ORDER.indexOf(crop.id);
+    let stage;
+    if (crop.daysGrown >= def.days) stage = 3;
+    else stage = Math.min(2, Math.floor((crop.daysGrown / def.days) * 4));
+    return idx * 4 + stage;
+  }
+
+  rebuildAll(tiles, objects) {
+    for (const key of [...this.tileSprites.keys()]) this.updateTile(key, null);
+    this.tilesState = {};
+    for (const [key, tile] of Object.entries(tiles)) this.updateTile(key, tile);
+    this.tilesState = tiles;
+    for (const key of [...this.objectSprites.keys()]) this.despawnObject(key);
+    this.objectsState = objects;
+    for (const [key, obj] of Object.entries(objects)) this.spawnObject(key, obj);
+  }
+
+  // ---------------- colisão ----------------
+  blockedAt(px, py) {
+    const x = Math.floor(px / T), y = Math.floor(py / T);
+    if (x < 0 || y < 0 || x >= this.world.width || y >= this.world.height) return true;
+    if (this.world.ground[y][x] === 1) return true;
+    if (this.objectsState[`${x},${y}`]) return true;
+    for (const b of this.world.buildings) {
+      if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return true;
+    }
+    return false;
+  }
+
+  // Caixa de colisão pequena nos "pés" do jogador (container.y = pés), simétrica
+  // nas quatro direções para o bloqueio parecer consistente perto de cercas/paredes.
+  moveWithCollision(e, dx, dy) {
+    const halfW = 5, footTop = -2, footBot = 3;
+    if (dx !== 0) {
+      const edge = e.container.x + dx + (dx > 0 ? halfW : -halfW);
+      if (!this.blockedAt(edge, e.container.y + footTop) && !this.blockedAt(edge, e.container.y + footBot)) e.container.x += dx;
+    }
+    if (dy !== 0) {
+      const edge = e.container.y + dy + (dy > 0 ? footBot : footTop);
+      if (!this.blockedAt(e.container.x - halfW, edge) && !this.blockedAt(e.container.x + halfW, edge)) e.container.y += dy;
+    }
+  }
+
+  // ---------------- input ----------------
+  bindInput() {
+    const K = Phaser.Input.Keyboard.KeyCodes;
+    this.keys = this.input.keyboard.addKeys({
+      up: K.W, down: K.S, left: K.A, right: K.D,
+      up2: K.UP, down2: K.DOWN, left2: K.LEFT, right2: K.RIGHT,
+      interact: K.E, action: K.SPACE, chat: K.ENTER, esc: K.ESC,
+    });
+    this.input.keyboard.on('keydown', (ev) => {
+      if (this.hud.chatFocused()) return;
+      if (ev.key >= '1' && ev.key <= '9') this.hud.select(Number(ev.key) - 1);
+      if (ev.key === 'Enter') { ev.preventDefault(); this.hud.focusChat(); }
+      if (ev.key === 'Escape') this.hud.closeModals();
+      if (ev.key.toLowerCase() === 'e') this.tryInteract();
+      if (ev.key === ' ') {
+        const me = this.players.get(this.me);
+        const fx = Math.floor(me.container.x / T) + (me.dir === 'left' ? -1 : me.dir === 'right' ? 1 : 0);
+        const fy = Math.floor(me.container.y / T) + (me.dir === 'up' ? -1 : me.dir === 'down' ? 1 : 0);
+        this.doAction(fx, fy);
+      }
+    });
+
+    this.input.on('pointermove', (p) => {
+      const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+      this.hoverTile = { x: Math.floor(wp.x / T), y: Math.floor(wp.y / T) };
+    });
+    this.input.on('pointerdown', (p) => {
+      if (this.hud.anyModalOpen() || this.hud.chatFocused()) return;
+      const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+      this.doAction(Math.floor(wp.x / T), Math.floor(wp.y / T), wp.x, wp.y);
+    });
+  }
+
+  inReach(tx, ty) {
+    const me = this.players.get(this.me);
+    const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
+    return Math.abs(tx - px) <= 2 && Math.abs(ty - py) <= 2;
+  }
+
+  doAction(tx, ty, worldX, worldY) {
+    let key = `${tx},${ty}`;
+    let obj = this.objectsState[key];
+    // clique na copa/corpo do objeto → redireciona para o tile-base dele
+    if (!obj && worldX !== undefined) {
+      for (const [k, sprite] of this.objectSprites) {
+        if (sprite.getBounds().contains(worldX, worldY)) {
+          const [ox, oy] = k.split(',').map(Number);
+          if (this.inReach(ox, oy)) { key = k; obj = this.objectsState[k]; tx = ox; ty = oy; }
+          break;
+        }
+      }
+    }
+    // o cultivo é desenhado 1 tile acima da raiz: em cliques, a planta "da frente"
+    // (tile de baixo) é a que aparece sob o cursor — prioriza ela
+    if (!obj && worldX !== undefined) {
+      const below = this.tilesState[`${tx},${ty + 1}`];
+      if (below && below.crop && this.inReach(tx, ty + 1)) { ty += 1; key = `${tx},${ty}`; }
+    }
+    // ovo: pegar sem ferramenta nem energia (prioridade máxima)
+    if (this.eggsState && this.eggsState[key] && this.inReach(tx, ty)) {
+      this.socket.emit('action', { type: 'collect', x: tx, y: ty });
+      return;
+    }
+    if (!this.inReach(tx, ty)) return;
+    const me = this.players.get(this.me);
+    const tile = this.tilesState[key];
+    const item = this.hud.selectedItem();
+    const ground = this.world.ground[ty] && this.world.ground[ty][tx];
+
+    // vira para o alvo
+    const dxT = tx - Math.floor(me.container.x / T), dyT = ty - Math.floor(me.container.y / T);
+    if (Math.abs(dxT) >= Math.abs(dyT)) me.dir = dxT >= 0 ? (dxT === 0 ? me.dir : 'right') : 'left';
+    else me.dir = dyT > 0 ? 'down' : 'up';
+
+    let type = null, extra = {};
+    if (obj && obj.type !== 'fence') {
+      // exige a ferramenta certa: machado para madeira, picareta para pedra
+      const needed = obj.type === 'rock' ? 'pickaxe' : 'axe';
+      if (!item || item.id !== needed) { this.hud.toast(t('err.wrong_tool')); return; }
+      type = obj.type === 'rock' ? 'mine' : 'chop';
+    } else if (tile && tile.crop) {
+      const ready = tile.crop.dead || tile.crop.daysGrown >= this.crops[tile.crop.id].days;
+      if (ready) type = 'harvest';
+      else if (item && item.id === 'can') type = 'water';
+    } else if (item && item.id === 'hoe') type = 'till';
+    else if (item && item.id === 'can') type = 'water';
+    else if (item && item.id.startsWith('seed_')) { type = 'plant'; extra.crop = item.id.slice(5); }
+
+    if (!type) return;
+    if (type === 'water' && ground !== 1 && (!tile || !tile.tilled)) return;
+    this.socket.emit('action', { type, x: tx, y: ty, ...extra });
+    this.playAnim(me, 'act', me.dir, true);
+    // ferramenta na mão dando o golpe (machado, picareta, enxada, regador)
+    const toolFor = { chop: 'axe', mine: 'pickaxe', till: 'hoe', water: 'can', plant: null, harvest: null };
+    this.showToolSwing(me, toolFor[type]);
+    if (type === 'harvest') this.popHarvest(key);
+    this.sendMove(true);
+  }
+
+  // Efeito de colheita: o cultivo "pula" e some, deixando claro que foi colhido
+  popHarvest(key) {
+    const entry = this.tileSprites.get(key);
+    if (!entry || !entry.crop) return;
+    const sp = entry.crop;
+    if (entry.readyTween) { entry.readyTween.stop(); entry.readyTween = null; }
+    entry.crop = null; // desacopla para o updateTile do servidor não mexer nele
+    this.tweens.add({
+      targets: sp, y: sp.y - 12, alpha: 0, scaleX: 1.25, scaleY: 1.25,
+      duration: 340, ease: 'Quad.out', onComplete: () => sp.destroy(),
+    });
+  }
+
+  // Sprite de ferramenta que aparece na mão e dá um golpe curto na direção da ação
+  showToolSwing(entry, toolId) {
+    if (!toolId || !this.textures.exists(`tool_${toolId}`)) return;
+    const dir = entry.dir;
+    const off = { down: [5, -16], up: [-5, -24], left: [-10, -20], right: [10, -20] }[dir] || [8, -20];
+    const t = this.add.image(entry.container.x + off[0], entry.container.y + off[1], `tool_${toolId}`)
+      .setScale(0.5).setDepth(entry.container.y + 1);
+    const flip = dir === 'left';
+    t.setFlipX(flip);
+    const base = flip ? 20 : -20;
+    t.setAngle(base - (flip ? -40 : 40));
+    this.tweens.add({
+      targets: t, angle: base + (flip ? -30 : 30), duration: 200, ease: 'Quad.in',
+      onComplete: () => this.tweens.add({ targets: t, alpha: 0, duration: 120, onComplete: () => t.destroy() }),
+    });
+  }
+
+  tryInteract() {
+    const me = this.players.get(this.me);
+    const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
+    const near = (d) => d && Math.abs(px - d.x) <= 1 && Math.abs(py - d.y) <= 1;
+    if (near(this.doors.shop)) this.hud.openShop();
+    else if (near(this.doors.bin)) this.hud.openBin();
+    else if (near(this.doors.house)) { this.socket.emit('sleep', true); this.hud.showSleep([]); }
+  }
+
+  // ---------------- rede ----------------
+  bindSocket() {
+    const s = this.socket;
+    s.on('playerJoined', (p) => { this.addPlayer(p); this.hud.addChat('☀', `${p.name} ➜`); });
+    s.on('playerLeft', ({ userId }) => this.removePlayer(userId));
+    s.on('playerMoved', (m) => {
+      const e = this.players.get(m.userId);
+      if (!e) return;
+      e.target = { x: m.x, y: m.y };
+      e.pendingDir = m.dir;
+      if (m.anim === 'act' && e.anim !== 'act') this.playAnim(e, 'act', m.dir, true);
+    });
+    s.on('playerAppearance', ({ userId, appearance }) => this.rebuildPlayerLayers(userId, appearance));
+    s.on('chat', ({ name, text }) => this.hud.addChat(name, text));
+    s.on('tile', ({ key, tile }) => this.updateTile(key, tile));
+    s.on('object', ({ key, obj }) => {
+      if (obj) { this.objectsState[key] = obj; this.hitObject(key); }
+      else { delete this.objectsState[key]; this.breakObject(key); }
+    });
+    s.on('egg', ({ key, egg }) => { if (egg) this.eggsState[key] = egg; else delete this.eggsState[key]; this.setEgg(key, egg); });
+    s.on('animals', ({ animals }) => this.setAnimals(animals));
+    s.on('inv', (inv) => this.hud.setInv(inv));
+    s.on('money', ({ money }) => this.hud.setMoney(money));
+    s.on('bin', ({ bin }) => this.hud.setBin(bin));
+    s.on('time', (data) => {
+      this.serverTime = data.time; this.serverTimeAt = performance.now();
+      this.hud.setTime(data);
+    });
+    s.on('err', ({ code }) => this.hud.toast(t('err.' + code)));
+    s.on('sleepState', ({ userId, sleeping, waiting }) => {
+      const overlayOpen = document.getElementById('sleep-overlay').style.display === 'flex';
+      if (userId === this.me && !sleeping) this.hud.hideSleep();
+      else if (overlayOpen) this.hud.showSleep(waiting);
+    });
+    s.on('dayEnded', (d) => {
+      this.serverTime = d.time; this.serverTimeAt = performance.now();
+      this.hud.setTime(d);
+      this.hud.setMoney(d.money);
+      this.hud.setBin([]);
+      this.rebuildAll(d.tiles, d.objects);
+      if (d.eggs) this.setEggs(d.eggs);
+      this.hud.showDaySummary(d);
+    });
+    s.on('disconnect', () => this.hud.toast(t('err.network')));
+  }
+
+  sendMove(force) {
+    const me = this.players.get(this.me);
+    const data = {
+      x: Math.round(me.container.x * 10) / 10, y: Math.round(me.container.y * 10) / 10,
+      dir: me.dir, anim: me.anim,
+    };
+    const l = this.lastSent;
+    if (force || l.x !== data.x || l.y !== data.y || l.dir !== data.dir || l.anim !== data.anim) {
+      this.socket.emit('move', data);
+      this.lastSent = data;
+    }
+  }
+
+  // ---------------- loop ----------------
+  update(_, deltaMs) {
+    const me = this.players.get(this.me);
+    if (!me) return;
+    const dt = deltaMs / 1000;
+
+    // movimento local
+    if (!this.hud.chatFocused() && !this.hud.anyModalOpen()) {
+      const k = this.keys;
+      let dx = (k.left.isDown || k.left2.isDown ? -1 : 0) + (k.right.isDown || k.right2.isDown ? 1 : 0);
+      let dy = (k.up.isDown || k.up2.isDown ? -1 : 0) + (k.down.isDown || k.down2.isDown ? 1 : 0);
+      if (dx || dy) {
+        const len = Math.hypot(dx, dy);
+        this.moveWithCollision(me, (dx / len) * SPEED * dt, (dy / len) * SPEED * dt);
+        me.dir = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'left' : dx > 0 ? 'right' : me.dir) : (dy < 0 ? 'up' : 'down');
+        if (me.anim !== 'act') this.playAnim(me, 'walk', me.dir);
+      } else if (me.anim === 'walk') {
+        this.playAnim(me, 'idle', me.dir);
+      }
+      me.container.setDepth(me.container.y);
+    }
+
+    // envio de posição (10 Hz)
+    this.moveAccum += deltaMs;
+    if (this.moveAccum >= 100) { this.moveAccum = 0; this.sendMove(false); }
+
+    // interpolação dos remotos
+    for (const e of this.players.values()) {
+      if (e.userId === this.me) continue;
+      const dx = e.target.x - e.container.x, dy = e.target.y - e.container.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 60) { e.container.setPosition(e.target.x, e.target.y); }
+      else if (dist > 0.5) {
+        e.container.x += dx * 0.18;
+        e.container.y += dy * 0.18;
+        if (e.anim !== 'act') this.playAnim(e, 'walk', e.pendingDir || e.dir);
+      } else if (e.anim === 'walk') {
+        this.playAnim(e, 'idle', e.pendingDir || e.dir);
+      }
+      e.container.setDepth(e.container.y);
+    }
+
+    // cursor de tile
+    if (this.hoverTile && this.inReach(this.hoverTile.x, this.hoverTile.y)) {
+      this.cursor.setVisible(true).setPosition(this.hoverTile.x * T, this.hoverTile.y * T);
+    } else this.cursor.setVisible(false);
+
+    // dica de interação
+    const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
+    let hint = null;
+    for (const [type, d] of Object.entries(this.doors)) {
+      if (Math.abs(px - d.x) <= 1 && Math.abs(py - d.y) <= 1) {
+        hint = t(`interact.${type === 'house' ? 'sleep' : type}`);
+        break;
+      }
+    }
+    if (hint) this.hintText.setVisible(true).setText(hint).setPosition(me.container.x, me.container.y - 34);
+    else this.hintText.setVisible(false);
+
+    this.updateChickens(dt);
+
+    // borboletas passeando
+    const now = this.time.now / 1000;
+    for (const b of this.butterflies || []) {
+      const bdx = b.tx - b.s.x, bdy = b.ty - b.s.y;
+      const d = Math.hypot(bdx, bdy);
+      if (d < 8) {
+        b.tx = Phaser.Math.Between(16, (this.world.width - 2) * T);
+        b.ty = Phaser.Math.Between(16, (this.world.height - 2) * T);
+      } else {
+        b.s.x += (bdx / d) * 22 * dt;
+        b.s.y += (bdy / d) * 22 * dt + Math.sin(now * 5 + b.phase) * 0.25;
+        b.s.setFlipX(bdx < 0);
+      }
+    }
+
+    // relógio local previsto + noite
+    const mins = this.serverTime + ((performance.now() - this.serverTimeAt) / 1000) * (1200 / 900);
+    if (Math.floor(mins) !== Math.floor(this.hud.state.time)) {
+      this.hud.setTime({ ...this.hud.state, time: mins });
+    }
+    const h = mins / 60;
+    let dark = 0;
+    if (h >= 17 && h < 20) dark = ((h - 17) / 3) * 0.35;
+    else if (h >= 20) dark = 0.35 + Math.min(1, (h - 20) / 6) * 0.25;
+    this.nightRect.setAlpha(dark);
+  }
+}
