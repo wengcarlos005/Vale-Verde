@@ -2,26 +2,32 @@ const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-
-const { stmts } = require('./db');
-const { router: authRouter, verifyToken, requireAuth } = require('./auth');
-const { initialFarmState } = require('./game/world');
-const { RoomManager } = require('./game/rooms');
+const backup = require('./backup');
 
 const PORT = process.env.PORT || 8140;
 const MAX_MEMBERS = 6;
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-const rooms = new RoomManager(io);
+// Restaura o backup da nuvem ANTES de abrir o banco (Render free não tem disco),
+// depois carrega os módulos que dependem do banco e sobe o servidor.
+async function main() {
+  await backup.restore().catch(e => console.error('[backup] restore falhou:', e.message));
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'client')));
+  const { db, stmts } = require('./db');
+  const { router: authRouter, verifyToken, requireAuth } = require('./auth');
+  const { initialFarmState } = require('./game/world');
+  const { RoomManager } = require('./game/rooms');
 
-app.use('/api/auth', authRouter);
+  const app = express();
+  const server = http.createServer(app);
+  const io = new Server(server);
+  const rooms = new RoomManager(io);
 
-// ---------- fazendas ----------
+  app.use(express.json());
+  app.use(express.static(path.join(__dirname, '..', 'client')));
+
+  app.use('/api/auth', authRouter);
+
+  // ---------- fazendas ----------
 function genCode() {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let code;
@@ -93,6 +99,12 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => room.leave(socket));
 });
 
-server.listen(PORT, () => {
-  console.log(`Greenvale server on http://localhost:${PORT}`);
-});
+  backup.startAutoSave(db);
+
+  server.listen(PORT, () => {
+    console.log(`Greenvale server on http://localhost:${PORT}`);
+    if (backup.enabled()) console.log('[backup] progresso salvo na nuvem (Turso)');
+  });
+}
+
+main().catch(e => { console.error('Falha ao iniciar:', e); process.exit(1); });

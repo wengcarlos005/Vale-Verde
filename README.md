@@ -2,7 +2,7 @@
 
 Jogo de fazenda cooperativo para web (estilo Stardew Valley), com **multiplayer de até 6 jogadores por fazenda**, em PT-BR e Inglês.
 
-> **⚠️ Deploy:** este jogo **não roda no Vercel** (precisa de servidor Node persistente com WebSocket + disco). Use **Render** (tem `render.yaml` pronto), Railway ou Fly.io — veja [`DEPLOY.md`](DEPLOY.md).
+> **⚠️ Deploy:** este jogo **não roda no Vercel** (precisa de servidor Node persistente com WebSocket). Rode de graça no **Render** + **Turso** (salva o progresso na nuvem, sem cartão) — passo a passo em [`DEPLOY.md`](DEPLOY.md).
 >
 > **🔒 Licença:** os sprites vêm de um pack pago que proíbe redistribuição — mantenha este repositório **privado**.
 

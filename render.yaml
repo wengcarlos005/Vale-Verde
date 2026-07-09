@@ -1,10 +1,11 @@
 # Blueprint de deploy no Render (https://render.com).
 # Servidor Node persistente com WebSocket — funciona no plano FREE.
 #
-# OBS sobre salvar progresso: o plano free NÃO tem disco persistente, então o
-# SQLite (data/greenvale.db) é reiniciado a cada novo deploy ou quando o serviço
-# "dorme". Para salvar de verdade, descomente o bloco `disk` abaixo e suba o
-# serviço para um plano pago (Starter), OU use Railway/Fly (têm volume no free).
+# SALVAR PROGRESSO DE GRAÇA: o free do Render não tem disco, mas o jogo faz
+# backup do banco na nuvem via Turso (grátis). Depois de criar a database no
+# Turso, preencha TURSO_DATABASE_URL e TURSO_AUTH_TOKEN nas Environment do
+# serviço no Render (passo a passo no DEPLOY.md). Sem essas variáveis o jogo
+# roda igual, mas a fazenda zera quando o serviço reinicia.
 services:
   - type: web
     name: vale-verde
@@ -15,7 +16,7 @@ services:
     envVars:
       - key: JWT_SECRET
         generateValue: true
-    # disk:
-    #   name: data
-    #   mountPath: /opt/render/project/src/data
-    #   sizeGB: 1
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false

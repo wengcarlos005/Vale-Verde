@@ -10,15 +10,35 @@ O Vale Verde é um **servidor Node.js persistente** (Express + **Socket.IO** par
 
 Ou seja: o multiplayer simplesmente **não funciona no Vercel**. Use uma das opções abaixo, que hospedam servidores Node persistentes com WebSocket e disco. São igualmente fáceis e têm plano gratuito.
 
-## ✅ Opção recomendada: Render (grátis, tem `render.yaml` pronto)
+## ✅ Recomendado: Render (servidor) + Turso (salva o progresso) — tudo GRÁTIS
 
-1. Repositório **privado** no GitHub (obrigatório — ver seção de licença abaixo).
-2. Em [render.com](https://render.com), faça login com o GitHub.
-3. **New** → **Blueprint** → escolha o repositório `Vale-Verde`.
-   O `render.yaml` já configura tudo: build `npm install`, start `npm start`, `JWT_SECRET` gerado.
-4. **Apply** / **Create**. Em 1-3 min a URL sai como `https://vale-verde.onrender.com` — compartilhe com os amigos.
+Duas contas gratuitas, sem cartão de crédito. O Render roda o jogo; o Turso guarda
+o progresso na nuvem (o servidor faz backup automático a cada 2 min e ao desligar).
 
-> **Plano free:** o serviço "dorme" após ~15 min sem acesso (o 1º jogador espera ~50 s para acordar) e **não salva o progresso** entre reinícios (sem disco no free). Dá para jogar numa sessão, mas a fazenda zera quando o serviço dorme. Para **salvar de verdade**: descomente o bloco `disk` no `render.yaml` e suba para o plano Starter (pago), **ou** use Railway/Fly (volume no free).
+### Parte 1 — Turso (banco na nuvem, grátis)
+
+1. Acesse [turso.tech](https://turso.tech) e faça login (GitHub ou Google).
+2. Crie uma database (**Create Database** / **+**), dê um nome (ex: `vale-verde`).
+3. Na página da database, copie a **Database URL** (começa com `libsql://...`).
+4. Gere um token: **Create Token** (ou "Generate token") e copie o valor.
+   Guarde os dois — vão para o Render no próximo passo.
+
+### Parte 2 — Render (servidor do jogo, grátis)
+
+1. Repositório **privado** no GitHub (obrigatório — ver licença abaixo).
+2. Em [render.com](https://render.com), login com o GitHub.
+3. **New** → **Blueprint** → escolha o repositório `Vale-Verde` → **Apply**.
+   O `render.yaml` configura build, start e o `JWT_SECRET`.
+4. Ele vai pedir os valores de **TURSO_DATABASE_URL** e **TURSO_AUTH_TOKEN**
+   (marcados como `sync: false`): cole os dois que você copiou do Turso.
+   *(Se não pedir na hora: abra o serviço → **Environment** → adicione as duas
+   variáveis → **Save**, que ele redeploya.)*
+5. Em 1-3 min a URL sai como `https://vale-verde.onrender.com` — compartilhe!
+
+> **Plano free do Render:** o serviço "dorme" após ~15 min sem ninguém online
+> (o 1º a entrar espera ~50 s para acordar). Com o Turso configurado, **o
+> progresso é preservado** ao acordar — a fazenda continua onde parou. Sem o
+> Turso, o jogo roda mas a fazenda zera a cada reinício.
 
 ## ✅ Alternativa: Railway
 
