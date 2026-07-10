@@ -81,7 +81,7 @@ class Room {
   inBounds(x, y) { return x >= 0 && y >= 0 && x < W.WIDTH && y < W.HEIGHT; }
 
   isBuildingTile(x, y) {
-    const hit = (b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+    const hit = (b) => { const r = W.collisionRect(b); return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
     return W.BUILDINGS.some(hit) || this.state.buildings.some(hit);
   }
 
@@ -438,6 +438,11 @@ class Room {
         }
       }
     }
+    // folga em relação a outros prédios (evita telhados/paredes se sobrepondo visualmente)
+    const vis = def.vis != null ? def.vis : 4;
+    if (!W.buildingSpotFree(s, bx, by, def.w, def.h, vis)) {
+      socket.emit('err', { code: 'bad_spot' }); return;
+    }
     // materiais
     const inv = this.inv(p.userId);
     const cost = def.cost || {};
@@ -448,7 +453,7 @@ class Room {
     if (cost.stone) this.addItem(inv, 'stone', -cost.stone);
     if (cost.money) s.money -= cost.money;
 
-    const b = { id: s.nextBuildingId++, type: data.type, x: bx, y: by, w: def.w, h: def.h };
+    const b = { id: s.nextBuildingId++, type: data.type, x: bx, y: by, w: def.w, h: def.h, vis };
     s.buildings.push(b);
     this.dirty = true;
     this.emit('building', { building: b });

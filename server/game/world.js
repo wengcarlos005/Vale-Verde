@@ -14,10 +14,13 @@ function mulberry32(seed) {
 }
 
 // Prédios FIXOS iniciais: rect = base com colisão (sprite desenhado acima, alinhado
-// pela borda inferior). door = tile de interação (na borda de baixo).
+// pela borda inferior). door = tile de interação (na borda de baixo). padBottom =
+// linhas de tile transparentes na base do PNG (medido por pixel) que NÃO devem
+// bloquear — sem isso a colisão "sobra" além da parede visível e o jogador é
+// barrado num tile de grama normal na frente da porta.
 const BUILDINGS = [
-  { type: 'house', x: 6,  y: 6, w: 9, h: 4, door: [10, 9] },  // dormir (sprite 144x128)
-  { type: 'shop',  x: 22, y: 6, w: 6, h: 4, door: [24, 9] },  // loja do Bob (sprite 96x128)
+  { type: 'house', x: 6,  y: 6, w: 9, h: 4, padBottom: 1, door: [10, 9] },  // dormir (sprite 144x128)
+  { type: 'shop',  x: 22, y: 6, w: 6, h: 4, padBottom: 1, door: [24, 9] },  // loja do Bob (sprite 96x128)
   { type: 'bin',   x: 16, y: 10, w: 1, h: 1, door: [16, 10] }, // caixa de venda
   { type: 'well',  x: 13, y: 13, w: 2, h: 1 },                 // decorativo (sprite 32x48)
 ];
@@ -33,6 +36,12 @@ function coopYard(b) {
   return { x: b.x - 1, y: b.y + b.h, w: b.w + 2, h: 4 };
 }
 
+// Retângulo de colisão real de um prédio (h reduzido pela margem transparente
+// da base do sprite, ver comentário de `padBottom` acima).
+function collisionRect(b) {
+  return { x: b.x, y: b.y, w: b.w, h: b.h - (b.padBottom || 0) };
+}
+
 // Área visual de um prédio (sprite sobe `vis` tiles acima da base)
 function buildingVisual(b, x, y) {
   const vis = b.vis != null ? b.vis : 4;
@@ -40,6 +49,22 @@ function buildingVisual(b, x, y) {
 }
 function inBuildingVisual(x, y) {
   return BUILDINGS.some(b => buildingVisual(b, x, y));
+}
+
+// Verifica se um novo prédio (bx,by,w,h, com overhang visual `vis` acima da base)
+// cabe sem encostar em nenhum prédio existente — evita telhados/paredes se
+// sobrepondo visualmente quando o jogador constrói perto demais de outro prédio.
+function buildingSpotFree(state, bx, by, w, h, vis, sidePad = 1) {
+  const rects = [...BUILDINGS, ...state.buildings];
+  const nx0 = bx - sidePad, nx1 = bx + w + sidePad;
+  const ny0 = by - vis, ny1 = by + h + sidePad;
+  for (const ob of rects) {
+    const ovis = ob.vis != null ? ob.vis : 4;
+    const ex0 = ob.x - sidePad, ex1 = ob.x + ob.w + sidePad;
+    const ey0 = ob.y - ovis, ey1 = ob.y + ob.h + sidePad;
+    if (nx0 < ex1 && nx1 > ex0 && ny0 < ey1 && ny1 > ey0) return false;
+  }
+  return true;
 }
 
 const POND = { x: 44, y: 36, w: 12, h: 10 };
@@ -173,5 +198,5 @@ function scatterForage(state, n, rnd = Math.random) {
 
 module.exports = {
   WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN,
-  generateWorld, initialFarmState, inBuildingVisual, buildingVisual, coopYard, scatterForage,
+  generateWorld, initialFarmState, inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
 };

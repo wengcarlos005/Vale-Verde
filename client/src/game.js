@@ -362,12 +362,17 @@ class GameScene extends Phaser.Scene {
         .play({ key: `decor_lily_${row}`, startFrame: Math.floor(rnd() * 8) });
     }
     // props decorativos (banco, feno, tronco caído) em pontos de grama livres
+    // Props decorativos ocupam 2 tiles de largura na base (x,y)-(x+1,y); registra
+    // essa base em propBlockers para o jogador não conseguir andar por cima deles.
+    this.propBlockers = new Set();
     const placeProp = (key, tries) => {
       for (let k = 0; k < tries; k++) {
         const x = 2 + Math.floor(rnd() * (W_ - 4));
         const y = 2 + Math.floor(rnd() * (H_ - 4));
         if (grassTile(x, y) && grassTile(x + 1, y)) {
           this.add.image(x * T, y * T + T, key).setOrigin(0, 1).setDepth(y * T + T);
+          this.propBlockers.add(`${x},${y}`);
+          this.propBlockers.add(`${x + 1},${y}`);
           return;
         }
       }
@@ -399,8 +404,9 @@ class GameScene extends Phaser.Scene {
       }
     }
     const shop = this.world.buildings.find(b => b.type === 'shop');
-    this.bob = this.add.sprite((shop.x + shop.w) * T - 8, (shop.y + shop.h) * T + 14, 'bob')
-      .setOrigin(0.5, 0.8).setDepth((shop.y + shop.h) * T + 14);
+    const bobX = (shop.x + shop.w) * T - 8, bobY = (shop.y + shop.h) * T + 14;
+    this.bob = this.add.sprite(bobX, bobY, 'bob').setOrigin(0.5, 0.8).setDepth(bobY);
+    this.npcBlockers = new Set([`${Math.floor(bobX / T)},${Math.floor(bobY / T)}`]);
 
     // prédios construídos pelo jogador
     this.placedBuildings = new Map(); // id -> {sprite, b}
@@ -694,7 +700,15 @@ class GameScene extends Phaser.Scene {
     if (x < 0 || y < 0 || x >= this.world.width || y >= this.world.height) return true;
     if (this.world.ground[y][x] === 1) return true;
     if (this.objectsState[`${x},${y}`]) return true;
-    const inRect = (b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+    const key = `${x},${y}`;
+    if (this.propBlockers && this.propBlockers.has(key)) return true;
+    if (this.npcBlockers && this.npcBlockers.has(key)) return true;
+    // colisão real do prédio: h reduzido pela margem transparente da base do sprite
+    // (padBottom) — sem isso a colisão "sobra" além da parede visível.
+    const inRect = (b) => {
+      const h = b.h - (b.padBottom || 0);
+      return x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + h;
+    };
     if (this.world.buildings.some(inRect)) return true;
     if (this.buildingsState.some(inRect)) return true;
     return false;
@@ -785,9 +799,21 @@ class GameScene extends Phaser.Scene {
       for (let x = bx; x < bx + def.w; x++) {
         if (this.world.ground[y][x] !== 0) return false;
         if (this.objectsState[`${x},${y}`] || this.tilesState[`${x},${y}`]) return false;
-        const inR = (b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+        const inR = (b) => { const h = b.h - (b.padBottom || 0); return x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + h; };
         if (this.world.buildings.some(inR) || this.buildingsState.some(inR)) return false;
       }
+    }
+    // folga em relação a outros prédios (espelha a validação do servidor —
+    // evita telhados/paredes se sobrepondo visualmente entre construções vizinhas)
+    const vis = def.vis != null ? def.vis : 4;
+    const sidePad = 1;
+    const nx0 = bx - sidePad, nx1 = bx + def.w + sidePad;
+    const ny0 = by - vis, ny1 = by + def.h + sidePad;
+    for (const ob of [...this.world.buildings, ...this.buildingsState]) {
+      const ovis = ob.vis != null ? ob.vis : 4;
+      const ex0 = ob.x - sidePad, ex1 = ob.x + ob.w + sidePad;
+      const ey0 = ob.y - ovis, ey1 = ob.y + ob.h + sidePad;
+      if (nx0 < ex1 && nx1 > ex0 && ny0 < ey1 && ny1 > ey0) return false;
     }
     return true;
   }
