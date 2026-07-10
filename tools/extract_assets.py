@@ -96,9 +96,12 @@ load(p("Tiles", "FarmLand", "FarmLand_Tile.png")).save(o("tilled.png"))
 load(p("Tiles", "FarmLand", "FarmLand_Wet_Tile.png")).save(o("tilled_wet.png"))
 
 # ---------- objetos ----------
+# As sheets de árvore são [toco, árvore-com-sombra, árvore-sem-sombra]; usamos só
+# o frame 1 (árvore com sombra, estática) — os outros faziam a sombra piscar e o
+# tronco "cortar" quando animados.
 oak = load(p("Trees", "Medium_Oak_Tree.png"))
-oak.crop((32, 0, 96, 48)).save(o("tree.png"))                               # 2 frames 32x48 (sway)
-oak.crop((16, 32, 32, 48)).save(o("stump.png"))
+oak.crop((32, 0, 64, 48)).save(o("tree.png"))                               # frame 1, 32x48
+oak.crop((0, 16, 32, 48)).save(o("stump.png"))                             # toco (col 0)
 rock = load(p("Outdoor decoration", "Outdoor_Decor_Animations", "Rock_Animations", "Rock_11_Anim.png"))
 rock.save(o("rock.png"))                                                    # 8 frames 32x32
 chest = load(p("Buildings", "House_Decor", "Chest_Anim.png"))
@@ -140,7 +143,7 @@ for i, crop in enumerate(CROP_ORDER):
 # ---------- cercas, bétula, poço, arbustos ----------
 load(p("Outdoor decoration", "Fences.png")).save(o("fence.png"))            # 16 frames 16x16
 birch = load(p("Trees", "Medium_Birch_Tree.png"))
-birch.crop((32, 0, 96, 48)).save(o("tree_birch.png"))                       # 2 frames 32x48
+birch.crop((32, 0, 64, 48)).save(o("tree_birch.png"))                       # frame 1, 32x48
 load(p("Outdoor decoration", "Well.png")).save(o("well.png"))               # 32x48
 od = load(p("Outdoor decoration", "Outdoor_Decor.png"))
 bush_sheet = Image.new("RGBA", (5 * 16, 16), (0, 0, 0, 0))

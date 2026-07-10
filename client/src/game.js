@@ -63,8 +63,8 @@ class GameScene extends Phaser.Scene {
     L.spritesheet('tilled_wet', '/assets/tilled_wet.png', { frameWidth: T, frameHeight: T });
     L.spritesheet('crops', '/assets/crops_stages.png', { frameWidth: T, frameHeight: 32 });
     L.image('crop_dead', '/assets/crop_dead.png');
-    L.spritesheet('tree', '/assets/tree.png', { frameWidth: 32, frameHeight: 48 });
-    L.spritesheet('tree_birch', '/assets/tree_birch.png', { frameWidth: 32, frameHeight: 48 });
+    L.image('tree', '/assets/tree.png');
+    L.image('tree_birch', '/assets/tree_birch.png');
     L.image('stump', '/assets/stump.png');
     L.spritesheet('bushes', '/assets/bushes.png', { frameWidth: T, frameHeight: T });
     L.spritesheet('fence', '/assets/fence.png', { frameWidth: T, frameHeight: T });
@@ -142,8 +142,6 @@ class GameScene extends Phaser.Scene {
 
     // anims compartilhadas (antes de spawnar qualquer objeto)
     this.anims.create({ key: 'water_flow', frames: this.anims.generateFrameNumbers('water', { start: 0, end: 7 }), frameRate: 4, repeat: -1 });
-    this.anims.create({ key: 'tree_sway', frames: this.anims.generateFrameNumbers('tree', { start: 0, end: 1 }), frameRate: 2, repeat: -1 });
-    this.anims.create({ key: 'birch_sway', frames: this.anims.generateFrameNumbers('tree_birch', { start: 0, end: 1 }), frameRate: 2, repeat: -1 });
     this.anims.create({ key: 'bob_idle', frames: this.anims.generateFrameNumbers('bob', { start: 0, end: 5 }), frameRate: 5, repeat: -1 });
     this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly', { start: 0, end: 3 }), frameRate: 10, repeat: -1 });
     // galinha: linha 0 idle (0-1), linha 1 anda p/ baixo (8-13), linha 2 lado (16-21), linha 3 cima (24-29)
@@ -418,8 +416,7 @@ class GameScene extends Phaser.Scene {
     let sprite;
     if (obj.type === 'tree') {
       const birch = obj.variant === 'birch';
-      sprite = this.add.sprite(cx, by, birch ? 'tree_birch' : 'tree', 0).setOrigin(0.5, 1).setDepth(by);
-      sprite.play({ key: birch ? 'birch_sway' : 'tree_sway', startFrame: Phaser.Math.Between(0, 1), delay: Phaser.Math.Between(0, 500) });
+      sprite = this.add.image(cx, by, birch ? 'tree_birch' : 'tree').setOrigin(0.5, 1).setDepth(by);
     } else if (obj.type === 'rock') {
       sprite = this.add.sprite(cx, by, 'rock', 0).setOrigin(0.5, 1).setDepth(by);
     } else if (obj.type === 'bush') {
@@ -661,8 +658,14 @@ class GameScene extends Phaser.Scene {
   doAction(tx, ty, worldX, worldY) {
     let key = `${tx},${ty}`;
     let obj = this.objectsState[key];
-    // clique na copa/corpo do objeto → redireciona para o tile-base dele
-    if (!obj && worldX !== undefined) {
+    // Prioridade: se o tile clicado já é acionável por si só (objeto, solo arado,
+    // cultivo ou ovo), age nele direto. Só quando o tile clicado é "vazio" (grama)
+    // é que redirecionamos para um sprite que se sobrepõe a partir de baixo
+    // (copa de árvore / folhas de um cultivo) — evita agir no tile de baixo por engano.
+    const hereTile = this.tilesState[key];
+    const hereActionable = obj || (hereTile && (hereTile.crop || hereTile.tilled)) || (this.eggsState && this.eggsState[key]);
+    if (!hereActionable && worldX !== undefined) {
+      // árvores/pedras/arbustos pelo retângulo do sprite
       for (const [k, sprite] of this.objectSprites) {
         if (sprite.getBounds().contains(worldX, worldY)) {
           const [ox, oy] = k.split(',').map(Number);
@@ -670,12 +673,16 @@ class GameScene extends Phaser.Scene {
           break;
         }
       }
-    }
-    // o cultivo é desenhado 1 tile acima da raiz: em cliques, a planta "da frente"
-    // (tile de baixo) é a que aparece sob o cursor — prioriza ela
-    if (!obj && worldX !== undefined) {
-      const below = this.tilesState[`${tx},${ty + 1}`];
-      if (below && below.crop && this.inReach(tx, ty + 1)) { ty += 1; key = `${tx},${ty}`; }
+      // cultivo cujo sprite sobe para o tile clicado → mira a raiz dele
+      if (!obj) {
+        for (const [k, entry] of this.tileSprites) {
+          if (entry.crop && entry.crop.getBounds().contains(worldX, worldY)) {
+            const [cx, cy] = k.split(',').map(Number);
+            if (this.inReach(cx, cy)) { key = k; tx = cx; ty = cy; }
+            break;
+          }
+        }
+      }
     }
     // ovo: pegar sem ferramenta nem energia (prioridade máxima)
     if (this.eggsState && this.eggsState[key] && this.inReach(tx, ty)) {
