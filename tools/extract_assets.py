@@ -109,8 +109,9 @@ chest.crop((0, 0, 16, 16)).save(o("bin.png"))
 
 # ---------- animais e galinheiro ----------
 load(p("Animals", "Chicken", "Chicken_01.png")).save(o("chicken.png"))       # 8x16 frames 32x32
-load(p("Buildings", "Buildings", "Unique_Buildings", "Coop", "Coop_Base_Red.png")) \
-    .crop((80, 0, 160, 128)).save(o("coop.png"))                             # variante do meio, 80x128
+_coop = load(p("Buildings", "Buildings", "Unique_Buildings", "Coop", "Coop_Base_Red.png")).crop((80, 0, 160, 128))
+_coop.save(o("coop.png"))                                                    # variante do meio, 80x128
+_coop.resize((32, 32), Image.LANCZOS).save(o("coop_icon.png"))               # miniatura para a loja
 
 # ovo (mundo) e ícone de ovo gerados
 egg = Image.new("RGBA", (16, 16), (0, 0, 0, 0))

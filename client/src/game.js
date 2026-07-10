@@ -149,6 +149,8 @@ class GameScene extends Phaser.Scene {
     this.crops = d.crops;
     this.tilesState = d.state.tiles;
     this.objectsState = d.state.objects;
+    this.buildingsState = d.state.buildings || [];
+    this.buildingDefs = d.world.buildingDefs || {};
     this.me = d.you.userId;
     this.players = new Map();       // userId -> {container, sprites, target, dir, anim, name}
     this.tileSprites = new Map();   // "x,y" -> {overlay, crop}
@@ -156,12 +158,14 @@ class GameScene extends Phaser.Scene {
 
     this.hud = new Hud({
       sendChat: (txt) => this.socket.emit('chat', txt),
+      build: (type) => this.enterBuildMode(type),
       buy: (crop, qty) => this.socket.emit('buy', { crop, qty }),
       buyAnimal: () => this.socket.emit('buyAnimal'),
       sell: (item, qty) => this.socket.emit('sell', { item, qty }),
       cancelSleep: () => { this.socket.emit('sleep', false); this.hud.hideSleep(); },
     });
     this.hud.crops = this.crops;
+    this.hud.buildingDefs = this.buildingDefs;
     this.hud.setInv(d.you.inv);
     this.hud.setMoney(d.state.money);
     this.hud.setBin(d.state.bin);
@@ -388,6 +392,17 @@ class GameScene extends Phaser.Scene {
     const shop = this.world.buildings.find(b => b.type === 'shop');
     this.bob = this.add.sprite((shop.x + shop.w) * T - 8, (shop.y + shop.h) * T + 14, 'bob')
       .setOrigin(0.5, 0.8).setDepth((shop.y + shop.h) * T + 14);
+
+    // prédios construídos pelo jogador
+    this.placedBuildings = new Map(); // id -> {sprite, b}
+    for (const b of this.buildingsState) this.addBuilding(b);
+  }
+
+  addBuilding(b) {
+    if (this.placedBuildings.has(b.id)) return;
+    const bx = b.x * T, by = (b.y + b.h) * T;
+    const sprite = this.add.image(bx, by, b.type).setOrigin(0, 1).setDepth(by - 1);
+    this.placedBuildings.set(b.id, { sprite, b });
   }
 
   // ---------------- jogadores ----------------
@@ -650,9 +665,9 @@ class GameScene extends Phaser.Scene {
     if (x < 0 || y < 0 || x >= this.world.width || y >= this.world.height) return true;
     if (this.world.ground[y][x] === 1) return true;
     if (this.objectsState[`${x},${y}`]) return true;
-    for (const b of this.world.buildings) {
-      if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return true;
-    }
+    const inRect = (b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+    if (this.world.buildings.some(inRect)) return true;
+    if (this.buildingsState.some(inRect)) return true;
     return false;
   }
 
@@ -680,9 +695,10 @@ class GameScene extends Phaser.Scene {
     });
     this.input.keyboard.on('keydown', (ev) => {
       if (this.hud.chatFocused()) return;
+      if (ev.key === 'Escape') { if (this.buildMode) { this.cancelBuild(); this.hud.toast(t('build.cancel')); } this.hud.closeModals(); return; }
+      if (this.buildMode) return; // no modo construção, teclas de ação ficam inativas
       if (ev.key >= '1' && ev.key <= '9') this.hud.select(Number(ev.key) - 1);
       if (ev.key === 'Enter') { ev.preventDefault(); this.hud.focusChat(); }
-      if (ev.key === 'Escape') this.hud.closeModals();
       if (ev.key.toLowerCase() === 'e') this.tryInteract();
       if (ev.key === ' ') {
         const me = this.players.get(this.me);
@@ -697,6 +713,16 @@ class GameScene extends Phaser.Scene {
       this.hoverTile = { x: Math.floor(wp.x / T), y: Math.floor(wp.y / T) };
     });
     this.input.on('pointerdown', (p) => {
+      if (this.buildMode) {
+        this.updateBuildMode();
+        if (this.buildMode.valid) {
+          this.socket.emit('build', { type: this.buildMode.type, x: this.buildMode.bx, y: this.buildMode.by });
+          this.cancelBuild();
+        } else {
+          this.hud.toast(t('err.bad_spot'));
+        }
+        return;
+      }
       if (this.hud.anyModalOpen() || this.hud.chatFocused()) return;
       const wp = this.cameras.main.getWorldPoint(p.x, p.y);
       this.doAction(Math.floor(wp.x / T), Math.floor(wp.y / T), wp.x, wp.y);
@@ -707,6 +733,44 @@ class GameScene extends Phaser.Scene {
     const me = this.players.get(this.me);
     const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
     return Math.abs(tx - px) <= 2 && Math.abs(ty - py) <= 2;
+  }
+
+  // ---------------- construção ----------------
+  enterBuildMode(type) {
+    const def = this.buildingDefs[type];
+    if (!def) return;
+    this.hud.closeModals();
+    this.cancelBuild();
+    const ghost = this.add.image(0, 0, type).setOrigin(0, 1).setAlpha(0.7).setDepth(100000);
+    this.buildMode = { type, def, ghost };
+    this.hud.toast(t('build.place'), 3500);
+  }
+
+  cancelBuild() {
+    if (this.buildMode) { this.buildMode.ghost.destroy(); this.buildMode = null; }
+  }
+
+  buildSpotValid(bx, by, def) {
+    if (bx < 1 || by < 1 || bx + def.w > this.world.width - 1 || by + def.h > this.world.height - 1) return false;
+    for (let y = by; y < by + def.h; y++) {
+      for (let x = bx; x < bx + def.w; x++) {
+        if (this.world.ground[y][x] !== 0) return false;
+        if (this.objectsState[`${x},${y}`] || this.tilesState[`${x},${y}`]) return false;
+        const inR = (b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+        if (this.world.buildings.some(inR) || this.buildingsState.some(inR)) return false;
+      }
+    }
+    return true;
+  }
+
+  updateBuildMode() {
+    if (!this.buildMode || !this.hoverTile) return;
+    const { def, ghost } = this.buildMode;
+    const bx = this.hoverTile.x, by = this.hoverTile.y;
+    ghost.setPosition(bx * T, (by + def.h) * T).setDepth(100000);
+    const ok = this.buildSpotValid(bx, by, def);
+    ghost.setTint(ok ? 0x88ff88 : 0xff8888);
+    this.buildMode.valid = ok; this.buildMode.bx = bx; this.buildMode.by = by;
   }
 
   doAction(tx, ty, worldX, worldY) {
@@ -839,6 +903,11 @@ class GameScene extends Phaser.Scene {
     });
     s.on('egg', ({ key, egg }) => { if (egg) this.eggsState[key] = egg; else delete this.eggsState[key]; this.setEgg(key, egg); });
     s.on('animals', ({ animals }) => this.setAnimals(animals));
+    s.on('building', ({ building }) => {
+      this.buildingsState.push(building);
+      this.addBuilding(building);
+      this.hud.toast(t('build.placed'));
+    });
     s.on('inv', (inv) => this.hud.setInv(inv));
     s.on('money', ({ money }) => this.hud.setMoney(money));
     s.on('bin', ({ bin }) => this.hud.setBin(bin));
@@ -919,8 +988,12 @@ class GameScene extends Phaser.Scene {
       e.container.setDepth(e.container.y);
     }
 
-    // cursor de tile
-    if (this.hoverTile && this.inReach(this.hoverTile.x, this.hoverTile.y)) {
+    // modo construção: fantasma segue o cursor
+    if (this.buildMode) {
+      this.updateBuildMode();
+      this.cursor.setVisible(false);
+    } else if (this.hoverTile && this.inReach(this.hoverTile.x, this.hoverTile.y)) {
+      // cursor de tile
       this.cursor.setVisible(true).setPosition(this.hoverTile.x * T, this.hoverTile.y * T);
     } else this.cursor.setVisible(false);
 

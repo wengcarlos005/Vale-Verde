@@ -13,23 +13,33 @@ function mulberry32(seed) {
   };
 }
 
-// Prédios: rect = base com colisão (sprite desenhado acima, alinhado pela borda inferior).
-// door = tile de interação (na borda de baixo, jogador interage parado em frente).
+// Prédios FIXOS iniciais: rect = base com colisão (sprite desenhado acima, alinhado
+// pela borda inferior). door = tile de interação (na borda de baixo).
 const BUILDINGS = [
   { type: 'house', x: 6,  y: 6, w: 9, h: 4, door: [10, 9] },  // dormir (sprite 144x128)
   { type: 'shop',  x: 22, y: 6, w: 6, h: 4, door: [24, 9] },  // loja do Bob (sprite 96x128)
   { type: 'bin',   x: 16, y: 10, w: 1, h: 1, door: [16, 10] }, // caixa de venda
   { type: 'well',  x: 13, y: 13, w: 2, h: 1 },                 // decorativo (sprite 32x48)
-  { type: 'coop',  x: 40, y: 16, w: 5, h: 2, door: [42, 18] }, // galinheiro (sprite 80x128)
 ];
 
-// Área onde as galinhas ciscam e os ovos aparecem (em frente ao galinheiro)
-const COOP_YARD = { x: 39, y: 18, w: 7, h: 5 };
+// Prédios CONSTRUÍVEIS pelo jogador (comprados com materiais e posicionados).
+// h = tiles da base com colisão; vis = quantos tiles o sprite sobe acima da base.
+const BUILDING_DEFS = {
+  coop: { w: 5, h: 2, vis: 6, door: [2, 2], cost: { wood: 30, stone: 10, money: 0 } },
+};
 
-// Área visual dos prédios (sprite sobe ~4 tiles acima da base de colisão):
-// nada de árvore/pedra deve nascer aqui para não "flutuar" no telhado.
+// Quintal em frente a um galinheiro (onde galinhas ciscam e ovos aparecem)
+function coopYard(b) {
+  return { x: b.x - 1, y: b.y + b.h, w: b.w + 2, h: 4 };
+}
+
+// Área visual de um prédio (sprite sobe `vis` tiles acima da base)
+function buildingVisual(b, x, y) {
+  const vis = b.vis != null ? b.vis : 4;
+  return x >= b.x - 1 && x < b.x + b.w + 1 && y >= b.y - vis && y < b.y + b.h + 1;
+}
 function inBuildingVisual(x, y) {
-  return BUILDINGS.some(b => x >= b.x - 1 && x < b.x + b.w + 1 && y >= b.y - 4 && y < b.y + b.h + 1);
+  return BUILDINGS.some(b => buildingVisual(b, x, y));
 }
 
 const POND = { x: 44, y: 36, w: 12, h: 10 };
@@ -136,7 +146,12 @@ function initialFarmState(seed) {
     animals: [],             // [{id, type:'chicken', hx, hy}] galinhas do galinheiro
     eggs: {},                // "x,y" -> {} ovos a coletar
     nextAnimalId: 1,
+    buildings: [],           // [{id, type, x, y}] prédios construídos pelo jogador
+    nextBuildingId: 1,
   };
 }
 
-module.exports = { WIDTH, HEIGHT, TILE, BUILDINGS, POND, FARMLAND, SPAWN, COOP_YARD, generateWorld, initialFarmState, inBuildingVisual };
+module.exports = {
+  WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN,
+  generateWorld, initialFarmState, inBuildingVisual, buildingVisual, coopYard,
+};

@@ -44,10 +44,12 @@ class Room {
         this.state.objects[key] = obj;
       }
     }
-    // migração: campos de animais para fazendas antigas
+    // migração: campos de animais e construções para fazendas antigas
     if (!this.state.animals) this.state.animals = [];
     if (!this.state.eggs) this.state.eggs = {};
     if (!this.state.nextAnimalId) this.state.nextAnimalId = 1;
+    if (!this.state.buildings) this.state.buildings = [];
+    if (!this.state.nextBuildingId) this.state.nextBuildingId = 1;
     this.players = new Map(); // socketId -> player
     this.dirty = false;
     this.channel = `farm:${farm.id}`;
@@ -78,8 +80,12 @@ class Room {
   inBounds(x, y) { return x >= 0 && y >= 0 && x < W.WIDTH && y < W.HEIGHT; }
 
   isBuildingTile(x, y) {
-    return W.BUILDINGS.some(b => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h);
+    const hit = (b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+    return W.BUILDINGS.some(hit) || this.state.buildings.some(hit);
   }
+
+  // Galinheiros construídos (para ovos e compra de galinha)
+  coops() { return this.state.buildings.filter(b => b.type === 'coop'); }
 
   spend(inv, cost, socket) {
     if (inv.energy < cost) { socket.emit('err', { code: 'no_energy' }); return false; }
@@ -105,12 +111,13 @@ class Room {
       world: {
         width: W.WIDTH, height: W.HEIGHT, tile: W.TILE,
         ground: this.state.ground, buildings: W.BUILDINGS, spawn: W.SPAWN,
+        buildingDefs: W.BUILDING_DEFS,
       },
       state: {
         day: this.state.day, season: this.state.season, year: this.state.year,
         time: this.state.time, money: this.state.money,
         tiles: this.state.tiles, objects: this.state.objects, bin: this.state.bin,
-        animals: this.state.animals, eggs: this.state.eggs,
+        animals: this.state.animals, eggs: this.state.eggs, buildings: this.state.buildings,
       },
       crops: CROPS,
       you: { userId: user.id, inv },
@@ -201,10 +208,13 @@ class Room {
     // repõe alguns recursos
     this.respawnObjects(3);
 
-    // galinhas botam um ovo cada, em tiles de grama livres do quintal do galinheiro
-    for (const animal of s.animals) {
-      const spot = this.freeYardTile();
-      if (spot) s.eggs[spot] = { id: animal.id };
+    // galinhas botam um ovo cada, no quintal de algum galinheiro construído
+    const coops = this.coops();
+    if (coops.length) {
+      for (const animal of s.animals) {
+        const spot = this.freeYardTile(coops[Math.floor(Math.random() * coops.length)]);
+        if (spot) s.eggs[spot] = { id: animal.id };
+      }
     }
 
     // energia
@@ -225,10 +235,10 @@ class Room {
     }
   }
 
-  // Tile de grama livre no quintal do galinheiro (para botar ovo)
-  freeYardTile() {
+  // Tile de grama livre no quintal de um galinheiro (para botar ovo)
+  freeYardTile(coop) {
     const s = this.state;
-    const y0 = W.COOP_YARD;
+    const y0 = W.coopYard(coop);
     for (let tries = 0; tries < 40; tries++) {
       const x = y0.x + Math.floor(Math.random() * y0.w);
       const y = y0.y + Math.floor(Math.random() * y0.h);
@@ -381,10 +391,12 @@ class Room {
     const p = this.players.get(socket.id);
     if (!p) return;
     const s = this.state;
-    if (s.animals.length >= MAX_CHICKENS) { socket.emit('err', { code: 'no_animal_space' }); return; }
+    const coops = this.coops();
+    if (!coops.length) { socket.emit('err', { code: 'need_coop' }); return; }
+    if (s.animals.length >= MAX_CHICKENS * coops.length) { socket.emit('err', { code: 'no_animal_space' }); return; }
     if (s.money < CHICKEN_PRICE) { socket.emit('err', { code: 'need_egg_money' }); return; }
     s.money -= CHICKEN_PRICE;
-    const y0 = W.COOP_YARD;
+    const y0 = W.coopYard(coops[Math.floor(Math.random() * coops.length)]);
     const animal = {
       id: s.nextAnimalId++, type: 'chicken',
       hx: (y0.x + 1 + Math.random() * (y0.w - 2)) * W.TILE,
@@ -394,6 +406,44 @@ class Room {
     this.dirty = true;
     this.emit('money', { money: s.money });
     this.emit('animals', { animals: s.animals });
+  }
+
+  // Construir um prédio: valida materiais e posição, desconta, adiciona ao estado.
+  onBuild(socket, data) {
+    const p = this.players.get(socket.id);
+    if (!p || !data) return;
+    const s = this.state;
+    const def = W.BUILDING_DEFS[String(data.type || '')];
+    if (!def) return;
+    const bx = Math.floor(data.x), by = Math.floor(data.y);
+    // dentro dos limites e longe das bordas
+    if (bx < 1 || by < 1 || bx + def.w > W.WIDTH - 1 || by + def.h > W.HEIGHT - 1) {
+      socket.emit('err', { code: 'bad_spot' }); return;
+    }
+    // posição livre: sem água/estrada, objetos, solo arado ou outro prédio
+    for (let y = by; y < by + def.h; y++) {
+      for (let x = bx; x < bx + def.w; x++) {
+        if (s.ground[y][x] !== 0 || s.objects[`${x},${y}`] || s.tiles[`${x},${y}`] || this.isBuildingTile(x, y)) {
+          socket.emit('err', { code: 'bad_spot' }); return;
+        }
+      }
+    }
+    // materiais
+    const inv = this.inv(p.userId);
+    const cost = def.cost || {};
+    if ((cost.wood || 0) > (inv.items.wood || 0) || (cost.stone || 0) > (inv.items.stone || 0) || (cost.money || 0) > s.money) {
+      socket.emit('err', { code: 'no_materials' }); return;
+    }
+    if (cost.wood) this.addItem(inv, 'wood', -cost.wood);
+    if (cost.stone) this.addItem(inv, 'stone', -cost.stone);
+    if (cost.money) s.money -= cost.money;
+
+    const b = { id: s.nextBuildingId++, type: data.type, x: bx, y: by, w: def.w, h: def.h };
+    s.buildings.push(b);
+    this.dirty = true;
+    this.emit('building', { building: b });
+    this.emit('money', { money: s.money });
+    socket.emit('inv', inv);
   }
 
   onSell(socket, data) {

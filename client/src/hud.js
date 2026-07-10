@@ -149,8 +149,26 @@ export class Hud {
     $('shop-money').textContent = t('shop.money', { money: this.state.money });
     const box = $('shop-items');
     box.innerHTML = '';
+    if (!this.shopTab) this.shopTab = 'seeds';
 
-    // galinha (animal): item destacado no topo
+    // abas
+    const tabs = document.createElement('div');
+    tabs.className = 'tabs';
+    for (const [id, key] of [['seeds', 'shop.tabSeeds'], ['build', 'shop.tabBuild']]) {
+      const tb = document.createElement('button');
+      tb.textContent = t(key);
+      tb.className = this.shopTab === id ? 'active' : '';
+      tb.addEventListener('click', () => { this.shopTab = id; this.renderShop(); });
+      tabs.appendChild(tb);
+    }
+    box.appendChild(tabs);
+
+    if (this.shopTab === 'seeds') this.renderShopSeeds(box);
+    else this.renderShopBuild(box);
+  }
+
+  renderShopSeeds(box) {
+    // galinha (animal)
     const coop = document.createElement('div');
     coop.className = 'shop-item';
     coop.innerHTML = `<img src="/assets/icons/item_egg.png" alt="">
@@ -178,6 +196,30 @@ export class Hud {
       b5.disabled = !inSeason;
       b5.addEventListener('click', () => this.game.buy(id, 5));
       div.append(b1, b5);
+      box.appendChild(div);
+    }
+  }
+
+  renderShopBuild(box) {
+    const names = { coop: 'shop.coop', coopDesc: 'shop.coopDesc' };
+    const have = { wood: this.inv.items.wood || 0, stone: this.inv.items.stone || 0 };
+    for (const [type, def] of Object.entries(this.buildingDefs || {})) {
+      const cost = def.cost || {};
+      const parts = [];
+      if (cost.wood) parts.push(`🪵${cost.wood}`);
+      if (cost.stone) parts.push(`🪨${cost.stone}`);
+      if (cost.money) parts.push(`💰${cost.money}`);
+      const enough = (cost.wood || 0) <= have.wood && (cost.stone || 0) <= have.stone && (cost.money || 0) <= this.state.money;
+      const div = document.createElement('div');
+      div.className = 'shop-item';
+      div.style.opacity = enough ? '1' : '.55';
+      div.innerHTML = `<img src="/assets/${type}_icon.png" alt="">
+        <div class="grow"><b>${t(names[type] || type)}</b><br>${parts.join(' · ')} · ${t(names[type + 'Desc'] || '')}</div>`;
+      const b = document.createElement('button');
+      b.textContent = t('shop.build');
+      b.disabled = !enough;
+      b.addEventListener('click', () => this.game.build(type));
+      div.appendChild(b);
       box.appendChild(div);
     }
   }

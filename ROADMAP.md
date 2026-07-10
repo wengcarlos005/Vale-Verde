@@ -6,6 +6,16 @@ com animação, galinhas/ovos, economia, dia-noite, chat, i18n, deploy no Render
 Abaixo, o plano de evolução em ordem sugerida. Cada item é uma "fatia" que dá para
 entregar e testar separadamente.
 
+## ✅ Sistema de construção (feito)
+
+Prédios são **comprados com materiais** (madeira/pedra/moedas) e **posicionados** pelo
+jogador: na loja do Bob há a aba **🔨 Construir**; ao escolher, entra no modo de
+posicionamento (fantasma segue o cursor, verde = ok / vermelho = inválido), clique
+posiciona, ESC cancela. O servidor valida posição e materiais. O **galinheiro** já usa
+esse sistema (30 madeira + 10 pedra); só dá para comprar galinhas depois de construir um.
+Próximos prédios (celeiro, estufa, silo, baú, cerca) entram como novas entradas em
+`BUILDING_DEFS` — a mecânica já está pronta.
+
 ## Fase A — Coleta e sobrevivência (curto prazo)
 
 - **Forrageio (comida que dá energia):** frutas silvestres, cogumelos e mel espalhados
