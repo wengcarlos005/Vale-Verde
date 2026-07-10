@@ -524,20 +524,13 @@ class GameScene extends Phaser.Scene {
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) this.refreshTile(x + dx, y + dy);
   }
 
-  // Autotile do solo arado. Bordas (N=1,E=2,S=4,W=8 vizinho presente) → blob 3x3/tiras;
-  // com os 4 vizinhos presentes, diagonais faltantes usam os tiles de canto interno (notch).
+  // Autotile do solo arado (blob 3x3 do FarmLand_Tile). Bit = vizinho arado presente
+  // (N=1,E=2,S=4,W=8). Blob: cantos 1/3/15/17, bordas 2/8/10/16, centro 9, isolado 0.
+  // Tiras de 1 tile e cantos internos não existem no tileset → fallback nas bordas/centro.
   tilledFrame(x, y) {
-    const MAP = [0, 21, 1, 22, 7, 14, 8, 15, 3, 24, 2, 23, 10, 17, 9, 16];
-    // notch bits: NE=1, SE=2, SW=4, NW=8 (diagonal ausente entre vizinhos presentes)
-    const NOTCH = { 1: 31, 2: 26, 3: 27, 4: 25, 5: 49, 7: 32, 8: 28, 10: 50, 12: 34, 11: 35, 13: 38, 14: 33, 15: 43 };
+    const MAP = [0, 16, 8, 15, 2, 9, 1, 8, 10, 17, 9, 16, 3, 10, 2, 9];
     const on = (xx, yy) => { const t = this.tilesState[`${xx},${yy}`]; return t && t.tilled ? 1 : 0; };
-    const n = on(x, y - 1), e = on(x + 1, y), s = on(x, y + 1), w = on(x - 1, y);
-    const mask = n | (e << 1) | (s << 2) | (w << 3);
-    if (mask === 15) {
-      const notches = (n && e && !on(x + 1, y - 1) ? 1 : 0) | (s && e && !on(x + 1, y + 1) ? 2 : 0)
-        | (s && w && !on(x - 1, y + 1) ? 4 : 0) | (n && w && !on(x - 1, y - 1) ? 8 : 0);
-      if (notches && NOTCH[notches] !== undefined) return NOTCH[notches];
-    }
+    const mask = on(x, y - 1) | (on(x + 1, y) << 1) | (on(x, y + 1) << 2) | (on(x - 1, y) << 3);
     return MAP[mask];
   }
 
