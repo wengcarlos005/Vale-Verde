@@ -25,6 +25,10 @@
 
   "chat.placeholder": "Press Enter to chat...",
 
+  "loading.connecting": "Connecting to server...",
+  "loading.assets": "Loading the world...",
+  "loading.ready": "Ready!",
+
   "app.hair": "Hair",
   "app.hairColor": "Hair color",
   "app.shirt": "Shirt",

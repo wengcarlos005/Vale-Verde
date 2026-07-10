@@ -1,0 +1,50 @@
+# Roadmap do Vale Verde
+
+Estado atual (v1): fazenda co-op multiplayer com contas, cultivos/estações, ferramentas
+com animação, galinhas/ovos, economia, dia-noite, chat, i18n, deploy no Render + Turso.
+
+Abaixo, o plano de evolução em ordem sugerida. Cada item é uma "fatia" que dá para
+entregar e testar separadamente.
+
+## Fase A — Coleta e sobrevivência (curto prazo)
+
+- **Forrageio (comida que dá energia):** frutas silvestres, cogumelos e mel espalhados
+  pelo mapa que você coleta (como os ovos) e **come para recuperar energia**. Novo item
+  "comida", ação `eat` (tecla/So botão no inventário), campo `energy` já existe no servidor.
+- **Troncos e gravetos coletáveis:** props no chão (o `log_fallen` já entra como decoração)
+  viram coletáveis que dão madeira/graveto sem gastar machado. Reusar o padrão dos ovos.
+- **Fabricação simples (crafting):** bancada perto da casa. Receitas: graveto+pedra → ferramenta
+  melhor; madeira → cerca/portão/baú; palha → ninho. Servidor valida receita e consome itens.
+
+## Fase B — NPCs e missões
+
+- **NPCs com falas:** o Bob (loja) e novos NPCs (pescador, ferreiro) ganham diálogo ao
+  interagir (E). Sistema de balões de fala + janela de diálogo (DOM).
+- **Missões / quadro de recados:** um mural na praça com pedidos ("entregue 10 nabos",
+  "corte 5 árvores") que dão recompensa (moedas/itens). Estado das missões salvo por fazenda.
+- **Amizade:** dar itens preferidos aos NPCs aumenta amizade → descontos, receitas, missões novas.
+
+## Fase C — Novos cenários (cidade e além)
+
+- **Vila / cidade:** um segundo mapa conectado por uma estrada na borda norte. Tem lojas
+  (sementeiro, ferreiro, mercado), NPCs e o quadro de missões. Troca de mapa = novo "room"
+  no servidor com seu próprio estado; o jogador transita entre fazenda e vila.
+- **Mina / caverna:** entrada numa encosta; andares com pedras/minérios (o pack tem tiles de
+  caverna e minérios). Picareta coleta minério → forja na cidade.
+- **Floresta / lago de pesca:** minigame de pesca no lago (o pack tem vara e peixes).
+
+## Fase D — Progressão de longo prazo
+
+- **Melhorias da fazenda:** comprar upgrades (regador maior, mochila, celeiro, estufa).
+- **Mais animais:** vacas (leite) e ovelhas (lã) — o pack tem os sprites; reusar o sistema
+  das galinhas com produto diário.
+- **Estações e eventos:** festivais sazonais na cidade, clima (chuva rega sozinho — efeitos
+  de chuva já existem no pack).
+
+## Notas técnicas para implementar
+
+- Novos coletáveis seguem o padrão de `eggs`/`onAction('collect')` no servidor.
+- Troca de cenário: generalizar `Room` para aceitar um `mapId`; o cliente recarrega o mundo
+  no evento `joined` (a tela de carregamento já cobre a transição).
+- Missões/NPCs: guardar no JSON de estado da fazenda (`state.quests`, `state.npcFriendship`).
+- Tudo continua salvando de graça via Turso (backup do SQLite inteiro).

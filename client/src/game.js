@@ -36,11 +36,27 @@ function defaultAppearance(userId) {
 
 let game = null;
 
+// Tela de carregamento (cobre o game-container até o mundo aparecer)
+function loading(pct, msgKey) {
+  const el = document.getElementById('game-loading');
+  if (!el) return;
+  el.classList.remove('hidden');
+  if (pct != null) document.getElementById('gl-fill').style.width = Math.round(pct) + '%';
+  if (msgKey) document.getElementById('gl-msg').textContent = t(msgKey);
+}
+function hideLoading() {
+  const el = document.getElementById('game-loading');
+  if (el) el.classList.add('hidden');
+}
+
 export function startGame(farm) {
+  loading(8, 'loading.connecting');
   const socket = connect(farm.id);
-  socket.on('connect_error', (e) => console.error('[greenvale] connect_error', e.message));
+  socket.on('connect_error', (e) => { console.error('[greenvale] connect_error', e.message); loading(8, 'loading.connecting'); });
+  socket.io.on('reconnect_attempt', () => loading(8, 'loading.connecting'));
   socket.once('joined', (data) => {
     window.gvBoot = 'joined';
+    loading(20, 'loading.assets');
     if (game) { game.destroy(true); game = null; }
     game = new Phaser.Game({
       type: Phaser.AUTO,
@@ -65,6 +81,7 @@ class GameScene extends Phaser.Scene {
   // ---------------- assets ----------------
   preload() {
     const L = this.load;
+    L.on('progress', (p) => loading(20 + p * 70, 'loading.assets')); // 20→90%
     L.spritesheet('grass', '/assets/grass.png', { frameWidth: T, frameHeight: T });
     L.spritesheet('water', '/assets/water.png', { frameWidth: T, frameHeight: T });
     L.image('path', '/assets/path.png');
@@ -78,6 +95,9 @@ class GameScene extends Phaser.Scene {
     L.spritesheet('bushes', '/assets/bushes.png', { frameWidth: T, frameHeight: T });
     L.spritesheet('fence', '/assets/fence.png', { frameWidth: T, frameHeight: T });
     L.image('well', '/assets/well.png');
+    L.image('bench', '/assets/bench.png');
+    L.image('hay', '/assets/hay.png');
+    L.image('log_fallen', '/assets/log_fallen.png');
     L.image('coop', '/assets/coop.png');
     L.image('egg', '/assets/egg.png');
     for (const tl of ['hoe', 'can', 'axe', 'pickaxe']) L.image(`tool_${tl}`, `/assets/icons/tool_${tl}.png`);
@@ -209,6 +229,10 @@ class GameScene extends Phaser.Scene {
     window.gvScene = this; // handle para debug/testes
     this.moveAccum = 0;
     this.lastSent = { x: 0, y: 0, dir: '', anim: '' };
+
+    // mundo pronto: completa a barra e esconde a tela de carregamento após o 1º frame
+    loading(100, 'loading.ready');
+    this.time.delayedCall(120, hideLoading);
   }
 
   buildGround() {
@@ -324,6 +348,21 @@ class GameScene extends Phaser.Scene {
       this.add.sprite(x * T, y * T, 'decor_lily', row * 8).setOrigin(0).setDepth(-4)
         .play({ key: `decor_lily_${row}`, startFrame: Math.floor(rnd() * 8) });
     }
+    // props decorativos (banco, feno, tronco caído) em pontos de grama livres
+    const placeProp = (key, tries) => {
+      for (let k = 0; k < tries; k++) {
+        const x = 2 + Math.floor(rnd() * (W_ - 4));
+        const y = 2 + Math.floor(rnd() * (H_ - 4));
+        if (grassTile(x, y) && grassTile(x + 1, y)) {
+          this.add.image(x * T, y * T + T, key).setOrigin(0, 1).setDepth(y * T + T);
+          return;
+        }
+      }
+    };
+    for (let i = 0; i < 3; i++) placeProp('bench', 30);
+    for (let i = 0; i < 5; i++) placeProp('hay', 30);
+    for (let i = 0; i < 6; i++) placeProp('log_fallen', 30);
+
     // borboletas passeando
     this.butterflies = [];
     for (let i = 0; i < 4; i++) {

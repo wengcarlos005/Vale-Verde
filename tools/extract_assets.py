@@ -145,6 +145,9 @@ load(p("Outdoor decoration", "Fences.png")).save(o("fence.png"))            # 16
 birch = load(p("Trees", "Medium_Birch_Tree.png"))
 birch.crop((32, 0, 64, 48)).save(o("tree_birch.png"))                       # frame 1, 32x48
 load(p("Outdoor decoration", "Well.png")).save(o("well.png"))               # 32x48
+load(p("Outdoor decoration", "Benches.png")).crop((32, 0, 64, 32)).save(o("bench.png"))  # banco de madeira 32x32
+load(p("Outdoor decoration", "Hay_Bales.png")).crop((0, 0, 16, 16)).save(o("hay.png"))   # fardo de feno 16x16
+load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 7 * 16, 32, 8 * 16)).save(o("log_fallen.png"))  # tronco caído 32x16
 od = load(p("Outdoor decoration", "Outdoor_Decor.png"))
 bush_sheet = Image.new("RGBA", (5 * 16, 16), (0, 0, 0, 0))
 for i, (cx, cy) in enumerate([(5, 5), (2, 9), (4, 9), (5, 9), (6, 9)]):
