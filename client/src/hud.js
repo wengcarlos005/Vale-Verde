@@ -11,7 +11,8 @@ export function itemIcon(id) {
   return `/assets/icons/item_${id}.png`;
 }
 
-const RESOURCE_PRICE = { wood: 3, stone: 3, egg: 50 };
+const RESOURCE_PRICE = { wood: 3, stone: 3, egg: 50, berry: 20, mushroom: 25 };
+export const FOODS = new Set(['berry', 'mushroom']);
 
 export function itemName(id) {
   if (TOOLS.includes(id)) return t(`tool.${id}`);
@@ -120,13 +121,17 @@ export class Hud {
     const bar = $('hotbar');
     bar.innerHTML = '';
     this.slots.forEach((s, i) => {
+      const food = FOODS.has(s.id);
       const div = document.createElement('div');
-      div.className = 'slot' + (i === this.selected ? ' active' : '');
-      div.title = itemName(s.id) + (s.id === 'can' ? ` (${this.inv.can.level}/${this.inv.can.max})` : '');
+      div.className = 'slot' + (i === this.selected ? ' active' : '') + (food ? ' food' : '');
+      div.title = food ? t('food.eat', { item: itemName(s.id) })
+        : itemName(s.id) + (s.id === 'can' ? ` (${this.inv.can.level}/${this.inv.can.max})` : '');
       div.innerHTML = `<span class="key">${i + 1 <= 9 ? i + 1 : ''}</span><img src="${itemIcon(s.id)}" alt="">` +
         (s.qty != null ? `<span class="qty">${s.qty}</span>` : '') +
+        (food ? `<span class="eat-badge">🍴</span>` : '') +
         (s.id === 'can' ? `<span class="qty" style="color:#3b82c4">${this.inv.can.level}</span>` : '');
-      div.addEventListener('click', () => this.select(i));
+      // comida: clicar come (é consumível, não ferramenta); demais: selecionam
+      div.addEventListener('click', () => { if (food) this.game.eat(s.id); else this.select(i); });
       bar.appendChild(div);
     });
   }

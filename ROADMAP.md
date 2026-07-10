@@ -16,15 +16,14 @@ esse sistema (30 madeira + 10 pedra); só dá para comprar galinhas depois de co
 Próximos prédios (celeiro, estufa, silo, baú, cerca) entram como novas entradas em
 `BUILDING_DEFS` — a mecânica já está pronta.
 
-## Fase A — Coleta e sobrevivência (curto prazo)
+## Fase A — Coleta e sobrevivência
 
-- **Forrageio (comida que dá energia):** frutas silvestres, cogumelos e mel espalhados
-  pelo mapa que você coleta (como os ovos) e **come para recuperar energia**. Novo item
-  "comida", ação `eat` (tecla/So botão no inventário), campo `energy` já existe no servidor.
-- **Troncos e gravetos coletáveis:** props no chão (o `log_fallen` já entra como decoração)
-  viram coletáveis que dão madeira/graveto sem gastar machado. Reusar o padrão dos ovos.
+- ✅ **Forrageio (comida que dá energia):** cerejas, cogumelos e lenha espalhados pelo mapa
+  (25 no início, +8 por dia), coletados como os ovos. Cerejas/cogumelos são **comida** —
+  clique na hotbar para **comer e recuperar energia**; também dão para vender. Lenha dá madeira.
 - **Fabricação simples (crafting):** bancada perto da casa. Receitas: graveto+pedra → ferramenta
   melhor; madeira → cerca/portão/baú; palha → ninho. Servidor valida receita e consome itens.
+  *(próximo item)*
 
 ## Fase B — NPCs e missões
 

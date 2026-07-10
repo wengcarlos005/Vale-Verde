@@ -19,6 +19,22 @@ const RESOURCES = {
   wood:  { sellPrice: 3 },
   stone: { sellPrice: 3 },
   egg:   { sellPrice: 50 },
+  berry: { sellPrice: 20 },
+  mushroom: { sellPrice: 25 },
+};
+
+// Comida: recupera energia ao comer.
+const FOOD = {
+  berry:    { energy: 12 },
+  mushroom: { energy: 18 },
+};
+
+// Forrageáveis espalhados pelo mapa e o que dão ao coletar.
+// give = item ganho; qty = quantidade.
+const FORAGE = {
+  berry:    { give: 'berry', qty: 1 },
+  mushroom: { give: 'mushroom', qty: 1 },
+  log:      { give: 'wood', qty: 2 },
 };
 
 const CHICKEN_PRICE = 100;
@@ -30,4 +46,4 @@ function stageOf(crop, daysGrown) {
   return Math.min(3, Math.floor((daysGrown / def.days) * 4));
 }
 
-module.exports = { CROPS, RESOURCES, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
+module.exports = { CROPS, RESOURCES, FOOD, FORAGE, stageOf, CHICKEN_PRICE, MAX_CHICKENS };

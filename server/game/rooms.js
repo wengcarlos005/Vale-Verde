@@ -1,6 +1,6 @@
 // Salas de jogo: uma por fazenda, servidor autoritativo.
 const { stmts } = require('../db');
-const { CROPS, RESOURCES, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
+const { CROPS, RESOURCES, FOOD, FORAGE, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
 const W = require('./world');
 
 const DAY_START = 6 * 60;          // 6:00
@@ -50,6 +50,7 @@ class Room {
     if (!this.state.nextAnimalId) this.state.nextAnimalId = 1;
     if (!this.state.buildings) this.state.buildings = [];
     if (!this.state.nextBuildingId) this.state.nextBuildingId = 1;
+    if (!this.state.forage) { this.state.forage = {}; W.scatterForage(this.state, 25); }
     this.players = new Map(); // socketId -> player
     this.dirty = false;
     this.channel = `farm:${farm.id}`;
@@ -118,6 +119,7 @@ class Room {
         time: this.state.time, money: this.state.money,
         tiles: this.state.tiles, objects: this.state.objects, bin: this.state.bin,
         animals: this.state.animals, eggs: this.state.eggs, buildings: this.state.buildings,
+        forage: this.state.forage,
       },
       crops: CROPS,
       you: { userId: user.id, inv },
@@ -205,8 +207,9 @@ class Room {
     }
     s.time = DAY_START;
 
-    // repõe alguns recursos
+    // repõe alguns recursos e forrageáveis
     this.respawnObjects(3);
+    W.scatterForage(s, 8);
 
     // galinhas botam um ovo cada, no quintal de algum galinheiro construído
     const coops = this.coops();
@@ -228,7 +231,7 @@ class Room {
     this.emit('dayEnded', {
       payout, soldItems, passedOut,
       day: s.day, season: s.season, year: s.year, time: s.time, money: s.money,
-      tiles: s.tiles, objects: s.objects, eggs: s.eggs,
+      tiles: s.tiles, objects: s.objects, eggs: s.eggs, forage: s.forage,
     });
     for (const p of this.players.values()) {
       this.io.to(p.socketId).emit('inv', this.inv(p.userId));
@@ -296,11 +299,18 @@ class Room {
     const obj = s.objects[key];
 
     if (type === 'collect') {
-      if (!s.eggs[key]) return;
-      delete s.eggs[key];
-      this.addItem(inv, 'egg', 1);
+      // ovo ou forrageável (fruta/cogumelo/lenha) — sem ferramenta nem energia
+      if (s.eggs[key]) {
+        delete s.eggs[key];
+        this.addItem(inv, 'egg', 1);
+        this.emit('egg', { key, egg: null });
+      } else if (s.forage[key]) {
+        const def = FORAGE[s.forage[key].type];
+        delete s.forage[key];
+        if (def) this.addItem(inv, def.give, def.qty);
+        this.emit('forage', { key, item: null });
+      } else return;
       this.dirty = true;
-      this.emit('egg', { key, egg: null });
       socket.emit('inv', inv);
     } else if (type === 'till') {
       if (ground !== 0 || obj || this.isBuildingTile(x, y) || (tile && tile.tilled)) return;
@@ -443,6 +453,22 @@ class Room {
     this.dirty = true;
     this.emit('building', { building: b });
     this.emit('money', { money: s.money });
+    socket.emit('inv', inv);
+  }
+
+  // Comer: recupera energia e consome 1 do item (frutas/cogumelos)
+  onEat(socket, data) {
+    const p = this.players.get(socket.id);
+    if (!p || !data) return;
+    const id = String(data.item || '');
+    const def = FOOD[id];
+    if (!def) return;
+    const inv = this.inv(p.userId);
+    if (!inv.items[id]) return;
+    if (inv.energy >= ENERGY_MAX) { socket.emit('err', { code: 'energy_full' }); return; }
+    this.addItem(inv, id, -1);
+    inv.energy = Math.min(ENERGY_MAX, inv.energy + def.energy);
+    this.dirty = true;
     socket.emit('inv', inv);
   }
 

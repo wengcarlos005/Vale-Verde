@@ -100,6 +100,9 @@ class GameScene extends Phaser.Scene {
     L.image('log_fallen', '/assets/log_fallen.png');
     L.image('coop', '/assets/coop.png');
     L.image('egg', '/assets/egg.png');
+    L.image('forage_berry', '/assets/forage_berry.png');
+    L.image('forage_mushroom', '/assets/forage_mushroom.png');
+    L.image('forage_log', '/assets/forage_log.png');
     for (const tl of ['hoe', 'can', 'axe', 'pickaxe']) L.image(`tool_${tl}`, `/assets/icons/tool_${tl}.png`);
     L.spritesheet('chicken', '/assets/chicken.png', { frameWidth: 32, frameHeight: 32 });
     L.spritesheet('rock', '/assets/rock.png', { frameWidth: 32, frameHeight: 32 });
@@ -159,6 +162,7 @@ class GameScene extends Phaser.Scene {
     this.hud = new Hud({
       sendChat: (txt) => this.socket.emit('chat', txt),
       build: (type) => this.enterBuildMode(type),
+      eat: (item) => this.socket.emit('eat', { item }),
       buy: (crop, qty) => this.socket.emit('buy', { crop, qty }),
       buyAnimal: () => this.socket.emit('buyAnimal'),
       sell: (item, qty) => this.socket.emit('sell', { item, qty }),
@@ -199,6 +203,11 @@ class GameScene extends Phaser.Scene {
     this.chickens = new Map();
     this.setEggs(d.state.eggs || {});
     this.setAnimals(d.state.animals || []);
+
+    // forrageáveis (frutas/cogumelos/lenha)
+    this.forageState = d.state.forage || {};
+    this.forageSprites = new Map();
+    for (const [key, f] of Object.entries(this.forageState)) this.setForage(key, f);
 
     this.waterSprites.forEach(s => s.play({ key: 'water_flow', startFrame: Phaser.Math.Between(0, 7) }));
     this.bob.play('bob_idle');
@@ -541,6 +550,26 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  setForage(key, f) {
+    const cur = this.forageSprites.get(key);
+    if (f) {
+      if (!cur) {
+        const [x, y] = key.split(',').map(Number);
+        const sp = this.add.image(x * T + T / 2, y * T + T - 2, `forage_${f.type}`).setOrigin(0.5, 1).setDepth(y * T + T - 2);
+        this.forageSprites.set(key, sp);
+      }
+    } else if (cur) {
+      cur.destroy();
+      this.forageSprites.delete(key);
+    }
+  }
+
+  setForageAll(forage) {
+    for (const key of [...this.forageSprites.keys()]) if (!forage[key]) this.setForage(key, null);
+    for (const key of Object.keys(forage)) if (!this.forageSprites.has(key)) this.setForage(key, forage[key]);
+    this.forageState = forage;
+  }
+
   setAnimals(animals) {
     const ids = new Set(animals.map(a => a.id));
     for (const [id, c] of this.chickens) if (!ids.has(id)) { c.sprite.destroy(); this.chickens.delete(id); }
@@ -781,7 +810,8 @@ class GameScene extends Phaser.Scene {
     // é que redirecionamos para um sprite que se sobrepõe a partir de baixo
     // (copa de árvore / folhas de um cultivo) — evita agir no tile de baixo por engano.
     const hereTile = this.tilesState[key];
-    const hereActionable = obj || (hereTile && (hereTile.crop || hereTile.tilled)) || (this.eggsState && this.eggsState[key]);
+    const hereActionable = obj || (hereTile && (hereTile.crop || hereTile.tilled))
+      || (this.eggsState && this.eggsState[key]) || (this.forageState && this.forageState[key]);
     if (!hereActionable && worldX !== undefined) {
       // árvores/pedras/arbustos pelo retângulo do sprite
       for (const [k, sprite] of this.objectSprites) {
@@ -802,8 +832,8 @@ class GameScene extends Phaser.Scene {
         }
       }
     }
-    // ovo: pegar sem ferramenta nem energia (prioridade máxima)
-    if (this.eggsState && this.eggsState[key] && this.inReach(tx, ty)) {
+    // ovo ou forrageável: pegar sem ferramenta nem energia (prioridade máxima)
+    if (((this.eggsState && this.eggsState[key]) || (this.forageState && this.forageState[key])) && this.inReach(tx, ty)) {
       this.socket.emit('action', { type: 'collect', x: tx, y: ty });
       return;
     }
@@ -902,6 +932,7 @@ class GameScene extends Phaser.Scene {
       else { delete this.objectsState[key]; this.breakObject(key); }
     });
     s.on('egg', ({ key, egg }) => { if (egg) this.eggsState[key] = egg; else delete this.eggsState[key]; this.setEgg(key, egg); });
+    s.on('forage', ({ key, item }) => { if (item) this.forageState[key] = item; else delete this.forageState[key]; this.setForage(key, item); });
     s.on('animals', ({ animals }) => this.setAnimals(animals));
     s.on('building', ({ building }) => {
       this.buildingsState.push(building);
@@ -928,6 +959,7 @@ class GameScene extends Phaser.Scene {
       this.hud.setBin([]);
       this.rebuildAll(d.tiles, d.objects);
       if (d.eggs) this.setEggs(d.eggs);
+      if (d.forage) this.setForageAll(d.forage);
       this.hud.showDaySummary(d);
     });
     s.on('disconnect', () => this.hud.toast(t('err.network')));

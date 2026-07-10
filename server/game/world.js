@@ -132,7 +132,7 @@ function generateWorld(seed) {
 
 function initialFarmState(seed) {
   const { ground, objects } = generateWorld(seed);
-  return {
+  const state = {
     v: 1,
     seed,
     day: 1, season: 0, year: 1,
@@ -148,10 +148,30 @@ function initialFarmState(seed) {
     nextAnimalId: 1,
     buildings: [],           // [{id, type, x, y}] prédios construídos pelo jogador
     nextBuildingId: 1,
+    forage: {},              // "x,y" -> {type} itens para forragear (berry/mushroom/log)
   };
+  scatterForage(state, 25, mulberry32(seed ^ 0x9e37));
+  return state;
+}
+
+// Espalha `n` forrageáveis em tiles de grama livres. Chamado na criação e a cada dia.
+function scatterForage(state, n, rnd = Math.random) {
+  const types = ['berry', 'mushroom', 'mushroom', 'log'];
+  const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+  let tries = 0;
+  while (n > 0 && tries++ < 400) {
+    const x = 1 + Math.floor(rnd() * (WIDTH - 2));
+    const y = 1 + Math.floor(rnd() * (HEIGHT - 2));
+    const key = `${x},${y}`;
+    if (state.ground[y][x] !== 0) continue;
+    if (state.objects[key] || state.tiles[key] || state.forage[key]) continue;
+    if (inRect(FARMLAND, x, y) || inBuildingVisual(x, y)) continue;
+    state.forage[key] = { type: types[Math.floor(rnd() * types.length)] };
+    n--;
+  }
 }
 
 module.exports = {
   WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN,
-  generateWorld, initialFarmState, inBuildingVisual, buildingVisual, coopYard,
+  generateWorld, initialFarmState, inBuildingVisual, buildingVisual, coopYard, scatterForage,
 };

@@ -121,6 +121,19 @@ ed.ellipse([6, 7, 8, 9], fill=(255, 255, 250, 255))
 egg.save(o("egg.png"))
 egg.resize((32, 32), Image.NEAREST).save(o("icons/item_egg.png"))
 
+# ---------- forrageio (comida e coletáveis) ----------
+food_ic = load(p("Icons", "Outline", "Food_Icons_Outline.png"))  # 8 cols x 12
+def food_frame(idx):
+    c, r = idx % 8, idx // 8
+    return food_ic.crop((c * 16, r * 16, c * 16 + 16, r * 16 + 16))
+FORAGE_ICONS = {"berry": 54, "mushroom": 4}  # cerejas, cogumelo
+for name, idx in FORAGE_ICONS.items():
+    fr = food_frame(idx)
+    fr.save(o(f"forage_{name}.png"))                               # sprite do mundo 16x16
+    fr.resize((32, 32), Image.NEAREST).save(o(f"icons/item_{name}.png"))
+# tronco pequeno coletável (metade do tronco caído)
+load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 7 * 16, 16, 8 * 16)).save(o("forage_log.png"))
+
 # ---------- prédios e NPC ----------
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_2_Wood_Base_Red.png")).save(o("house.png"))   # 144x128
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_1_Wood_Base_Blue.png")).save(o("shop.png"))   # 96x128

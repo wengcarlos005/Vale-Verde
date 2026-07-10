@@ -94,6 +94,7 @@ io.on('connection', (socket) => {
   socket.on('buy', d => room.onBuy(socket, d));
   socket.on('buyAnimal', () => room.onBuyAnimal(socket));
   socket.on('build', d => room.onBuild(socket, d));
+  socket.on('eat', d => room.onEat(socket, d));
   socket.on('sell', d => room.onSell(socket, d));
   socket.on('sleep', d => room.onSleep(socket, d));
   socket.on('appearance', d => room.onAppearance(socket, d));
