@@ -5,6 +5,15 @@ import { Hud, TOOLS } from './hud.js';
 import { t } from './i18n.js';
 
 const CROP_ORDER = ['turnip', 'potato', 'carrot', 'strawberry', 'tomato', 'corn', 'pepper', 'onion', 'cabbage', 'beet'];
+
+// Lookup do autotile do solo arado (assinatura → frame do FarmLand_Tile).
+// Derivado por análise de pixels em tools/analyze_farmland (bordas + cantos internos).
+const TILLED_BLOB = {
+  0: 9, 1: 2, 2: 10, 3: 3, 4: 16, 5: 23, 6: 17, 7: 24, 8: 8, 9: 1, 10: 14, 11: 7,
+  12: 15, 13: 22, 14: 21, 15: 0, 16: 49, 20: 36, 24: 11, 28: 18, 32: 50, 34: 13,
+  36: 37, 38: 20, 48: 12, 52: 19, 65: 29, 73: 4, 112: 45, 129: 30, 131: 6, 176: 44,
+  192: 42, 193: 5,
+};
 export const HAIR_COLORS = ['black', 'blonde', 'brown', 'ginger', 'grey'];
 export const OUTFIT_COLORS = ['black', 'blue', 'green', 'orange', 'pink', 'purple', 'red', 'white_and_brown'];
 
@@ -521,14 +530,20 @@ class GameScene extends Phaser.Scene {
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) this.refreshTile(x + dx, y + dy);
   }
 
-  // Autotile do solo arado (blob 3x3 do FarmLand_Tile). Bit = vizinho arado presente
-  // (N=1,E=2,S=4,W=8). Blob: cantos 1/3/15/17, bordas 2/8/10/16, centro 9, isolado 0.
-  // Tiras de 1 tile e cantos internos não existem no tileset → fallback nas bordas/centro.
+  // Autotile do solo arado (blob completo de 8 vizinhos do FarmLand_Tile, derivado
+  // por análise de pixels). Assinatura: bordas eN=1,eE=2,eS=4,eW=8 (vizinho sem terra)
+  // + cantos internos côncavos nNE=16,nNW=32,nSE=64,nSW=128 (2 bordas conectam mas a
+  // diagonal é grama). Fallback ignora os notches se a combinação não existir.
   tilledFrame(x, y) {
-    const MAP = [0, 16, 8, 15, 2, 9, 1, 8, 10, 17, 9, 16, 3, 10, 2, 9];
-    const on = (xx, yy) => { const t = this.tilesState[`${xx},${yy}`]; return t && t.tilled ? 1 : 0; };
-    const mask = on(x, y - 1) | (on(x + 1, y) << 1) | (on(x, y + 1) << 2) | (on(x - 1, y) << 3);
-    return MAP[mask];
+    const L = TILLED_BLOB;
+    const on = (xx, yy) => { const t = this.tilesState[`${xx},${yy}`]; return !!(t && t.tilled); };
+    const N = !on(x, y - 1), E = !on(x + 1, y), S = !on(x, y + 1), W = !on(x - 1, y);
+    let key = (N ? 1 : 0) | (E ? 2 : 0) | (S ? 4 : 0) | (W ? 8 : 0);
+    if (!N && !E && !on(x + 1, y - 1)) key |= 16;   // notch NE
+    if (!N && !W && !on(x - 1, y - 1)) key |= 32;   // notch NW
+    if (!S && !E && !on(x + 1, y + 1)) key |= 64;   // notch SE
+    if (!S && !W && !on(x - 1, y + 1)) key |= 128;  // notch SW
+    return L[key] !== undefined ? L[key] : (L[key & 15] !== undefined ? L[key & 15] : 9);
   }
 
   refreshTile(x, y) {
