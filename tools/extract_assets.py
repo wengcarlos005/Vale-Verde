@@ -122,15 +122,15 @@ egg.save(o("egg.png"))
 egg.resize((32, 32), Image.NEAREST).save(o("icons/item_egg.png"))
 
 # ---------- forrageio (comida e coletáveis) ----------
-food_ic = load(p("Icons", "Outline", "Food_Icons_Outline.png"))  # 8 cols x 12
-def food_frame(idx):
-    c, r = idx % 8, idx // 8
-    return food_ic.crop((c * 16, r * 16, c * 16 + 16, r * 16 + 16))
-FORAGE_ICONS = {"berry": 54, "mushroom": 4}  # cerejas, cogumelo
-for name, idx in FORAGE_ICONS.items():
-    fr = food_frame(idx)
-    fr.save(o(f"forage_{name}.png"))                               # sprite do mundo 16x16
-    fr.resize((32, 32), Image.NEAREST).save(o(f"icons/item_{name}.png"))
+# Sprites de MUNDO de verdade (com sombra própria na base), não ícones de UI —
+# senão ficam parecendo adesivos colados no chão em vez de plantados nele.
+berry_bush = load(p("Crops", "Berries.png")).crop((0, 0, 16, 16))            # touceira c/ frutas vermelhas
+mushroom_world = load(p("Outdoor decoration", "Outdoor_Decor_Animations",
+                         "Muschroom_Animations", "muschroom_1_Anim.png")).crop((0, 0, 16, 16))
+FORAGE_WORLD = {"berry": berry_bush, "mushroom": mushroom_world}
+for name, img in FORAGE_WORLD.items():
+    img.save(o(f"forage_{name}.png"))                              # sprite do mundo 16x16
+    img.resize((32, 32), Image.NEAREST).save(o(f"icons/item_{name}.png"))  # ícone reaproveitado p/ inventário
 # tronco pequeno coletável (metade do tronco caído)
 load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 7 * 16, 16, 8 * 16)).save(o("forage_log.png"))
 
