@@ -50,6 +50,11 @@
   "build.placed": "Built! 🏗️",
   "build.cancel": "Build canceled",
 
+  "craft.title": "🔨 Crafting Bench",
+  "craft.hint": "Turn materials into useful items.",
+  "craft.make": "Craft",
+  "craft.fenceDesc": "fence — select it in the hotbar and click on grass to place it",
+
   "bin.title": "📦 Shipping Bin",
   "bin.hint": "Put items here — payment arrives when everyone sleeps.",
   "bin.content": "In the bin:",
@@ -77,8 +82,9 @@
   "err.no_animal_space": "No room in the coop (max 6 chickens per coop).",
   "err.need_egg_money": "You need 100 coins to buy a chicken.",
   "err.need_coop": "Build a coop first (Build tab in the shop).",
-  "err.no_materials": "Not enough materials to build.",
+  "err.no_materials": "Not enough materials.",
   "err.bad_spot": "Can't build here — pick a flat, clear spot.",
+  "err.need_bench": "Get closer to the crafting bench (near the house).",
   "err.no_money": "Not enough money.",
   "err.bad_credentials": "Wrong e-mail or password.",
   "err.email_taken": "This e-mail is already registered.",
@@ -94,6 +100,7 @@
   "item.egg": "Egg",
   "item.berry": "Cherries",
   "item.mushroom": "Mushroom",
+  "item.fence": "Fence",
   "food.eat": "Eat {item} (+energy)",
   "err.energy_full": "Energy is already full.",
   "crop.turnip": "Turnip",
@@ -116,5 +123,6 @@
   "hud.day": "Day {day} — {season}",
   "interact.sleep": "Sleep (E)",
   "interact.shop": "Shop (E)",
-  "interact.bin": "Sell (E)"
+  "interact.bin": "Sell (E)",
+  "interact.bench": "Craft (E)"
 }

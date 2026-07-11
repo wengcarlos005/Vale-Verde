@@ -50,6 +50,11 @@
   "build.placed": "Construído! 🏗️",
   "build.cancel": "Construção cancelada",
 
+  "craft.title": "🔨 Bancada de Fabricação",
+  "craft.hint": "Transforme materiais em itens úteis.",
+  "craft.make": "Fabricar",
+  "craft.fenceDesc": "cerca — selecione na barra e clique na grama para plantar",
+
   "bin.title": "📦 Caixa de Venda",
   "bin.hint": "Coloque itens aqui — o pagamento chega quando todos dormirem.",
   "bin.content": "Na caixa:",
@@ -77,8 +82,9 @@
   "err.no_animal_space": "Sem espaço no galinheiro (máx. 6 galinhas por galinheiro).",
   "err.need_egg_money": "Você precisa de 100 moedas para comprar uma galinha.",
   "err.need_coop": "Construa um galinheiro primeiro (aba Construir na loja).",
-  "err.no_materials": "Materiais insuficientes para construir.",
+  "err.no_materials": "Materiais insuficientes.",
   "err.bad_spot": "Não dá para construir aqui — escolha um lugar plano e livre.",
+  "err.need_bench": "Aproxime-se da bancada de fabricação (perto da casa).",
   "err.no_money": "Dinheiro insuficiente.",
   "err.bad_credentials": "E-mail ou senha incorretos.",
   "err.email_taken": "Este e-mail já está cadastrado.",
@@ -94,6 +100,7 @@
   "item.egg": "Ovo",
   "item.berry": "Cerejas",
   "item.mushroom": "Cogumelo",
+  "item.fence": "Cerca",
   "food.eat": "Comer {item} (+energia)",
   "err.energy_full": "Energia já está cheia.",
   "crop.turnip": "Nabo",
@@ -116,5 +123,6 @@
   "hud.day": "Dia {day} — {season}",
   "interact.sleep": "Dormir (E)",
   "interact.shop": "Loja (E)",
-  "interact.bin": "Vender (E)"
+  "interact.bin": "Vender (E)",
+  "interact.bench": "Fabricar (E)"
 }

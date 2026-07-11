@@ -134,6 +134,11 @@ for name, img in FORAGE_WORLD.items():
 # tronco pequeno coletável (metade do tronco caído)
 load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 7 * 16, 16, 8 * 16)).save(o("forage_log.png"))
 
+# ---------- bancada de fabricação (fabricação simples) ----------
+load(p("Buildings", "House_Decor", "Anvil_Anim.png")).crop((0, 0, 16, 16)).save(o("anvil.png"))  # frame estático 16x16
+fence_sheet = load(p("Outdoor decoration", "Fences.png"))
+fence_sheet.crop((0, 48, 16, 64)).resize((32, 32), Image.NEAREST).save(o("icons/item_fence.png"))  # poste isolado (frame 12, mask=0)
+
 # ---------- prédios e NPC ----------
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_2_Wood_Base_Red.png")).save(o("house.png"))   # 144x128
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_1_Wood_Base_Blue.png")).save(o("shop.png"))   # 96x128

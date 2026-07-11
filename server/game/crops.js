@@ -37,6 +37,11 @@ const FORAGE = {
   log:      { give: 'wood', qty: 2 },
 };
 
+// Receitas da bancada de fabricação: custo em recursos → item dado ao inventário.
+const RECIPES = {
+  fence: { cost: { wood: 4 }, give: 'fence', qty: 1 },
+};
+
 const CHICKEN_PRICE = 100;
 const MAX_CHICKENS = 6;
 
@@ -46,4 +51,4 @@ function stageOf(crop, daysGrown) {
   return Math.min(3, Math.floor((daysGrown / def.days) * 4));
 }
 
-module.exports = { CROPS, RESOURCES, FOOD, FORAGE, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
+module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, stageOf, CHICKEN_PRICE, MAX_CHICKENS };

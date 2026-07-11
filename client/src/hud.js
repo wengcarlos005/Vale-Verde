@@ -14,10 +14,12 @@ export function itemIcon(id) {
 const RESOURCE_PRICE = { wood: 3, stone: 3, egg: 50, berry: 20, mushroom: 25 };
 export const FOODS = new Set(['berry', 'mushroom']);
 
+const CRAFTED_ITEMS = new Set(['fence']);
+
 export function itemName(id) {
   if (TOOLS.includes(id)) return t(`tool.${id}`);
   if (id.startsWith('seed_')) return t('seed.suffix', { crop: t(`crop.${id.slice(5)}`) });
-  if (id in RESOURCE_PRICE) return t(`item.${id}`);
+  if (id in RESOURCE_PRICE || CRAFTED_ITEMS.has(id)) return t(`item.${id}`);
   return t(`crop.${id}`);
 }
 
@@ -70,6 +72,7 @@ export class Hud {
     this.renderHotbar();
     this.renderEnergy();
     if ($('modal-bin').classList.contains('open')) this.renderBin();
+    if ($('modal-craft').classList.contains('open')) this.renderCraft();
   }
 
   setTime({ time, day, season, year }) {
@@ -229,6 +232,36 @@ export class Hud {
     }
   }
 
+  // ---------- bancada de fabricação ----------
+  openCraft() {
+    this.renderCraft();
+    $('modal-craft').classList.add('open');
+  }
+
+  renderCraft() {
+    const box = $('craft-items');
+    box.innerHTML = '';
+    const have = { wood: this.inv.items.wood || 0, stone: this.inv.items.stone || 0 };
+    for (const [id, def] of Object.entries(this.recipes || {})) {
+      const cost = def.cost || {};
+      const parts = [];
+      if (cost.wood) parts.push(`🪵${cost.wood}`);
+      if (cost.stone) parts.push(`🪨${cost.stone}`);
+      const enough = (cost.wood || 0) <= have.wood && (cost.stone || 0) <= have.stone;
+      const div = document.createElement('div');
+      div.className = 'shop-item';
+      div.style.opacity = enough ? '1' : '.55';
+      div.innerHTML = `<img src="${itemIcon(def.give)}" alt="">
+        <div class="grow"><b>${itemName(def.give)}</b><br>${parts.join(' · ')} · ${t(`craft.${id}Desc`)}</div>`;
+      const b = document.createElement('button');
+      b.textContent = t('craft.make');
+      b.disabled = !enough;
+      b.addEventListener('click', () => this.game.craft(id));
+      div.appendChild(b);
+      box.appendChild(div);
+    }
+  }
+
   // ---------- caixa de venda ----------
   openBin() {
     this.renderBin();
@@ -238,7 +271,8 @@ export class Hud {
   renderBin() {
     const box = $('bin-sell-items');
     box.innerHTML = '';
-    const sellable = Object.entries(this.inv.items).filter(([id]) => !id.startsWith('seed_'));
+    const sellable = Object.entries(this.inv.items)
+      .filter(([id]) => !id.startsWith('seed_') && (this.crops[id] || id in RESOURCE_PRICE));
     for (const [id, qty] of sellable) {
       const price = this.crops[id] ? this.crops[id].sellPrice : (RESOURCE_PRICE[id] || 0);
       const div = document.createElement('div');

@@ -21,9 +21,14 @@ Próximos prédios (celeiro, estufa, silo, baú, cerca) entram como novas entrad
 - ✅ **Forrageio (comida que dá energia):** cerejas, cogumelos e lenha espalhados pelo mapa
   (25 no início, +8 por dia), coletados como os ovos. Cerejas/cogumelos são **comida** —
   clique na hotbar para **comer e recuperar energia**; também dão para vender. Lenha dá madeira.
-- **Fabricação simples (crafting):** bancada perto da casa. Receitas: graveto+pedra → ferramenta
-  melhor; madeira → cerca/portão/baú; palha → ninho. Servidor valida receita e consome itens.
-  *(próximo item)*
+- ✅ **Fabricação simples (crafting):** bancada de fabricação (bigorna) perto da casa, na praça —
+  aperte E perto dela pra abrir. Receita v1: 4 madeira → 1 cerca. A cerca fabricada vai pro
+  inventário como item da hotbar; selecione-a e clique na grama para "plantá-la" (mesmo padrão
+  de clique das sementes), o que a transforma num poste de cerca real no mapa (conecta
+  visualmente com outras cercas vizinhas, inclusive as do mapa original). Servidor valida
+  proximidade da bancada e materiais antes de fabricar, e valida o tile antes de colocar.
+  Novas receitas entram só adicionando entradas em `RECIPES` (`server/game/crops.js`) — a
+  bancada, o modal e a validação já estão prontos para qualquer receita futura.
 
 ## Fase B — NPCs e missões
 

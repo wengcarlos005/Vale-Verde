@@ -96,6 +96,7 @@ class GameScene extends Phaser.Scene {
     L.spritesheet('fence', '/assets/fence.png', { frameWidth: T, frameHeight: T });
     L.image('well', '/assets/well.png');
     L.image('bench', '/assets/bench.png');
+    L.image('anvil', '/assets/anvil.png');
     L.image('hay', '/assets/hay.png');
     L.image('log_fallen', '/assets/log_fallen.png');
     L.image('coop', '/assets/coop.png');
@@ -150,6 +151,7 @@ class GameScene extends Phaser.Scene {
     const d = this.data0;
     this.world = d.world;
     this.crops = d.crops;
+    this.recipes = d.recipes || {};
     this.tilesState = d.state.tiles;
     this.objectsState = d.state.objects;
     this.buildingsState = d.state.buildings || [];
@@ -165,11 +167,13 @@ class GameScene extends Phaser.Scene {
       eat: (item) => this.socket.emit('eat', { item }),
       buy: (crop, qty) => this.socket.emit('buy', { crop, qty }),
       buyAnimal: () => this.socket.emit('buyAnimal'),
+      craft: (recipe) => this.socket.emit('craft', { recipe }),
       sell: (item, qty) => this.socket.emit('sell', { item, qty }),
       cancelSleep: () => { this.socket.emit('sleep', false); this.hud.hideSleep(); },
     });
     this.hud.crops = this.crops;
     this.hud.buildingDefs = this.buildingDefs;
+    this.hud.recipes = this.recipes;
     this.hud.setInv(d.you.inv);
     this.hud.setMoney(d.state.money);
     this.hud.setBin(d.state.bin);
@@ -403,9 +407,12 @@ class GameScene extends Phaser.Scene {
       else if (b.type === 'bin') this.add.image(bx + T / 2, by, 'bin').setOrigin(0.5, 1).setScale(1.4).setDepth(depth);
       else if (b.type === 'well') this.add.image(bx, by, 'well').setOrigin(0, 1).setDepth(depth);
       else if (b.type === 'coop') this.add.image(bx, by, 'coop').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'bench') this.add.image(bx + T / 2, by, 'anvil').setOrigin(0.5, 1).setScale(1.6).setDepth(depth);
       // só portas interativas geram dica/atalho E
       if (b.door && ['house', 'shop', 'bin'].includes(b.type)) {
         this.doors[b.type] = { x: b.door[0], y: b.door[1] + 1 };
+      } else if (b.type === 'bench') {
+        this.doors.bench = { x: b.x, y: b.y + b.h };
       }
     }
     const shop = this.world.buildings.find(b => b.type === 'shop');
@@ -528,6 +535,17 @@ class GameScene extends Phaser.Scene {
     const s = this.objectSprites.get(key);
     if (!s) return;
     this.tweens.add({ targets: s, angle: { from: -6, to: 0 }, duration: 140, ease: 'Sine.out' });
+  }
+
+  // Ao surgir uma cerca nova (colocada por um jogador), os postes vizinhos já
+  // desenhados precisam recalcular sua máscara de vizinhança pra "conectar" com ela.
+  refreshFenceNeighbors(key) {
+    const [x, y] = key.split(',').map(Number);
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      const k = `${x + dx},${y + dy}`;
+      const o = this.objectsState[k];
+      if (o && o.type === 'fence') this.spawnObject(k, o);
+    }
   }
 
   breakObject(key) {
@@ -893,9 +911,11 @@ class GameScene extends Phaser.Scene {
     } else if (item && item.id === 'hoe') type = 'till';
     else if (item && item.id === 'can') type = 'water';
     else if (item && item.id.startsWith('seed_')) { type = 'plant'; extra.crop = item.id.slice(5); }
+    else if (item && item.id === 'fence' && !obj && ground === 0) { type = 'place'; extra.item = 'fence'; }
 
     if (!type) return;
     if (type === 'water' && ground !== 1 && (!tile || !tile.tilled)) return;
+    if (type === 'place' && tile) return;
     this.socket.emit('action', { type, x: tx, y: ty, ...extra });
     this.playAnim(me, 'act', me.dir, true);
     // ferramenta na mão dando o golpe (machado, picareta, enxada, regador)
@@ -941,6 +961,7 @@ class GameScene extends Phaser.Scene {
     const near = (d) => d && Math.abs(px - d.x) <= 1 && Math.abs(py - d.y) <= 1;
     if (near(this.doors.shop)) this.hud.openShop();
     else if (near(this.doors.bin)) this.hud.openBin();
+    else if (near(this.doors.bench)) this.hud.openCraft();
     else if (near(this.doors.house)) { this.socket.emit('sleep', true); this.hud.showSleep([]); }
   }
 
@@ -960,8 +981,14 @@ class GameScene extends Phaser.Scene {
     s.on('chat', ({ name, text }) => this.hud.addChat(name, text));
     s.on('tile', ({ key, tile }) => this.updateTile(key, tile));
     s.on('object', ({ key, obj }) => {
-      if (obj) { this.objectsState[key] = obj; this.hitObject(key); }
-      else { delete this.objectsState[key]; this.breakObject(key); }
+      if (obj) {
+        this.objectsState[key] = obj;
+        if (this.objectSprites.has(key)) this.hitObject(key);
+        else {
+          this.spawnObject(key, obj);
+          if (obj.type === 'fence') this.refreshFenceNeighbors(key);
+        }
+      } else { delete this.objectsState[key]; this.breakObject(key); }
     });
     s.on('egg', ({ key, egg }) => { if (egg) this.eggsState[key] = egg; else delete this.eggsState[key]; this.setEgg(key, egg); });
     s.on('forage', ({ key, item }) => { if (item) this.forageState[key] = item; else delete this.forageState[key]; this.setForage(key, item); });

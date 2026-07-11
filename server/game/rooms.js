@@ -1,6 +1,6 @@
 // Salas de jogo: uma por fazenda, servidor autoritativo.
 const { stmts } = require('../db');
-const { CROPS, RESOURCES, FOOD, FORAGE, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
+const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
 const W = require('./world');
 
 const DAY_START = 6 * 60;          // 6:00
@@ -9,7 +9,7 @@ const REAL_DAY_MS = 15 * 60 * 1000; // 1 dia de jogo = 15 min reais
 const MIN_PER_TICK = (DAY_END - DAY_START) / (REAL_DAY_MS / 1000); // por segundo
 
 const ENERGY_MAX = 100;
-const COST = { till: 2, water: 1, plant: 1, harvest: 1, chop: 2, mine: 2 };
+const COST = { till: 2, water: 1, plant: 1, harvest: 1, chop: 2, mine: 2, place: 1 };
 
 function newInventory() {
   return {
@@ -37,7 +37,7 @@ class Room {
     }
     for (const key of Object.keys(this.state.tiles)) {
       const [x, y] = key.split(',').map(Number);
-      if (this.state.ground[y][x] !== 0) delete this.state.tiles[key];
+      if (this.state.ground[y][x] !== 0 || W.inBuildingVisual(x, y)) delete this.state.tiles[key];
     }
     for (const [key, obj] of Object.entries(fresh.objects)) {
       if (obj.type === 'fence' && !this.state.objects[key] && !this.state.tiles[key]) {
@@ -122,6 +122,7 @@ class Room {
         forage: this.state.forage,
       },
       crops: CROPS,
+      recipes: RECIPES,
       you: { userId: user.id, inv },
       players: [...this.players.values()].map(p => this.publicPlayer(p)),
     });
@@ -372,6 +373,18 @@ class Room {
         this.emit('object', { key, obj });
       }
       this.dirty = true;
+    } else if (type === 'place') {
+      // colocar um item fabricado no mundo (por ora só cerca)
+      const itemId = String(data.item || '');
+      if (itemId !== 'fence') return;
+      if (ground !== 0 || obj || tile || this.isBuildingTile(x, y)) return;
+      if (!inv.items.fence) return;
+      if (!this.spend(inv, COST.place, socket)) return;
+      this.addItem(inv, 'fence', -1);
+      s.objects[key] = { type: 'fence' };
+      this.emit('object', { key, obj: s.objects[key] });
+      socket.emit('inv', inv);
+      this.dirty = true;
     }
   }
 
@@ -458,6 +471,27 @@ class Room {
     this.dirty = true;
     this.emit('building', { building: b });
     this.emit('money', { money: s.money });
+    socket.emit('inv', inv);
+  }
+
+  // Fabricar na bancada: consome materiais e dá o item pronto (por ora só cerca).
+  onCraft(socket, data) {
+    const p = this.players.get(socket.id);
+    if (!p || !data) return;
+    const def = RECIPES[String(data.recipe || '')];
+    if (!def) return;
+    if (!W.BUILDINGS.some(b => b.type === 'bench' && this.near(p, b.x, b.y))) {
+      socket.emit('err', { code: 'need_bench' }); return;
+    }
+    const inv = this.inv(p.userId);
+    const cost = def.cost || {};
+    if ((cost.wood || 0) > (inv.items.wood || 0) || (cost.stone || 0) > (inv.items.stone || 0)) {
+      socket.emit('err', { code: 'no_materials' }); return;
+    }
+    if (cost.wood) this.addItem(inv, 'wood', -cost.wood);
+    if (cost.stone) this.addItem(inv, 'stone', -cost.stone);
+    this.addItem(inv, def.give, def.qty || 1);
+    this.dirty = true;
     socket.emit('inv', inv);
   }
 
