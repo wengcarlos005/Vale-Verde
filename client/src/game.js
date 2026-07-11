@@ -393,11 +393,16 @@ class GameScene extends Phaser.Scene {
     this.doors = {};
     for (const b of this.world.buildings) {
       const bx = b.x * T, by = (b.y + b.h) * T;
-      if (b.type === 'house') this.add.image(bx, by, 'house').setOrigin(0, 1).setDepth(by - 1);
-      else if (b.type === 'shop') this.add.image(bx, by, 'shop').setOrigin(0, 1).setDepth(by - 1);
-      else if (b.type === 'bin') this.add.image(bx + T / 2, by, 'bin').setOrigin(0.5, 1).setScale(1.4).setDepth(by - 1);
-      else if (b.type === 'well') this.add.image(bx, by, 'well').setOrigin(0, 1).setDepth(by - 1);
-      else if (b.type === 'coop') this.add.image(bx, by, 'coop').setOrigin(0, 1).setDepth(by - 1);
+      // A profundidade usa a base VISUAL real (descontando padBottom), não o
+      // ancoradouro completo do sprite — senão um jogador parado na faixa
+      // transparente da base (colisão liberada) teria profundidade menor que
+      // a da casa e renderizaria atrás dela, "sumindo" atrás da parede.
+      const depth = ((b.y + b.h - (b.padBottom || 0)) * T) - 1;
+      if (b.type === 'house') this.add.image(bx, by, 'house').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'shop') this.add.image(bx, by, 'shop').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'bin') this.add.image(bx + T / 2, by, 'bin').setOrigin(0.5, 1).setScale(1.4).setDepth(depth);
+      else if (b.type === 'well') this.add.image(bx, by, 'well').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'coop') this.add.image(bx, by, 'coop').setOrigin(0, 1).setDepth(depth);
       // só portas interativas geram dica/atalho E
       if (b.door && ['house', 'shop', 'bin'].includes(b.type)) {
         this.doors[b.type] = { x: b.door[0], y: b.door[1] + 1 };
@@ -416,7 +421,8 @@ class GameScene extends Phaser.Scene {
   addBuilding(b) {
     if (this.placedBuildings.has(b.id)) return;
     const bx = b.x * T, by = (b.y + b.h) * T;
-    const sprite = this.add.image(bx, by, b.type).setOrigin(0, 1).setDepth(by - 1);
+    const depth = ((b.y + b.h - (b.padBottom || 0)) * T) - 1;
+    const sprite = this.add.image(bx, by, b.type).setOrigin(0, 1).setDepth(depth);
     this.placedBuildings.set(b.id, { sprite, b });
   }
 
