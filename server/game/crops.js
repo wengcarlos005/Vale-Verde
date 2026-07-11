@@ -42,6 +42,21 @@ const RECIPES = {
   fence: { cost: { wood: 4 }, give: 'fence', qty: 1 },
 };
 
+// Pedidos do quadro de recados: só itens sempre obteníveis (não presos à estação).
+const QUEST_POOL = [
+  { item: 'wood', qty: 12 },
+  { item: 'stone', qty: 8 },
+  { item: 'egg', qty: 3 },
+  { item: 'berry', qty: 6 },
+  { item: 'mushroom', qty: 5 },
+];
+
+function pickQuest(rnd = Math.random) {
+  const t = QUEST_POOL[Math.floor(rnd() * QUEST_POOL.length)];
+  const reward = Math.round(RESOURCES[t.item].sellPrice * t.qty * 1.5);
+  return { item: t.item, qty: t.qty, reward };
+}
+
 const CHICKEN_PRICE = 100;
 const MAX_CHICKENS = 6;
 
@@ -51,4 +66,4 @@ function stageOf(crop, daysGrown) {
   return Math.min(3, Math.floor((daysGrown / def.days) * 4));
 }
 
-module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
+module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };

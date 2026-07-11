@@ -30,6 +30,7 @@ export class Hud {
     this.slots = [];        // [{id, qty}]
     this.selected = 0;
     this.crops = {};
+    this.quest = null;
     this.state = { money: 0, season: 0, day: 1, year: 1, time: 360, bin: [] };
 
     $('chat-input').addEventListener('keydown', (e) => {
@@ -73,6 +74,7 @@ export class Hud {
     this.renderEnergy();
     if ($('modal-bin').classList.contains('open')) this.renderBin();
     if ($('modal-craft').classList.contains('open')) this.renderCraft();
+    if ($('modal-quest').classList.contains('open')) this.renderQuest();
   }
 
   setTime({ time, day, season, year }) {
@@ -89,6 +91,11 @@ export class Hud {
   setBin(bin) {
     this.state.bin = bin;
     if ($('modal-bin').classList.contains('open')) this.renderBin();
+  }
+
+  setQuest(quest) {
+    this.quest = quest;
+    if ($('modal-quest').classList.contains('open')) this.renderQuest();
   }
 
   // ---------- render ----------
@@ -260,6 +267,32 @@ export class Hud {
       div.appendChild(b);
       box.appendChild(div);
     }
+  }
+
+  // ---------- quadro de recados ----------
+  openQuest() {
+    this.renderQuest();
+    $('modal-quest').classList.add('open');
+  }
+
+  renderQuest() {
+    const box = $('quest-items');
+    box.innerHTML = '';
+    const q = this.quest;
+    if (!q) return;
+    const have = this.inv.items[q.item] || 0;
+    const enough = have >= q.qty;
+    const div = document.createElement('div');
+    div.className = 'shop-item';
+    div.style.opacity = enough ? '1' : '.7';
+    div.innerHTML = `<img src="${itemIcon(q.item)}" alt="">
+      <div class="grow"><b>${itemName(q.item)}</b> ${have}/${q.qty}<br>${t('quest.reward', { reward: q.reward })}</div>`;
+    const b = document.createElement('button');
+    b.textContent = t('quest.deliver');
+    b.disabled = !enough;
+    b.addEventListener('click', () => this.game.deliverQuest());
+    div.appendChild(b);
+    box.appendChild(div);
   }
 
   // ---------- caixa de venda ----------

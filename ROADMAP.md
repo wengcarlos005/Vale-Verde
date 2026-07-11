@@ -32,10 +32,15 @@ Próximos prédios (celeiro, estufa, silo, baú, cerca) entram como novas entrad
 
 ## Fase B — NPCs e missões
 
+- ✅ **Quadro de recados:** placa fixa na praça (entre a caixa de venda e a loja) — aperte E
+  pra ver o pedido atual ("entregue 3 ovos", "entregue 12 madeira" etc., sempre itens não
+  presos à estação: madeira/pedra/ovo/cereja/cogumelo). Entregar dá uma recompensa em moedas
+  (melhor que vender direto) e sorteia um novo pedido; todo mundo na fazenda vê no chat quem
+  entregou. Servidor valida proximidade da placa e quantidade antes de aceitar. Só 1 pedido
+  ativo por vez (fica esperando até alguém entregar, não expira). Próximo passo natural:
+  pedidos variados por dia/NPC específico, e recompensas em itens além de moedas.
 - **NPCs com falas:** o Bob (loja) e novos NPCs (pescador, ferreiro) ganham diálogo ao
   interagir (E). Sistema de balões de fala + janela de diálogo (DOM).
-- **Missões / quadro de recados:** um mural na praça com pedidos ("entregue 10 nabos",
-  "corte 5 árvores") que dão recompensa (moedas/itens). Estado das missões salvo por fazenda.
 - **Amizade:** dar itens preferidos aos NPCs aumenta amizade → descontos, receitas, missões novas.
 
 ## Fase C — Novos cenários (cidade e além)

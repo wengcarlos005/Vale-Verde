@@ -1,6 +1,6 @@
 // Salas de jogo: uma por fazenda, servidor autoritativo.
 const { stmts } = require('../db');
-const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
+const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
 const W = require('./world');
 
 const DAY_START = 6 * 60;          // 6:00
@@ -51,6 +51,7 @@ class Room {
     if (!this.state.buildings) this.state.buildings = [];
     if (!this.state.nextBuildingId) this.state.nextBuildingId = 1;
     if (!this.state.forage) { this.state.forage = {}; W.scatterForage(this.state, 25); }
+    if (!this.state.quest) this.state.quest = pickQuest();
     this.players = new Map(); // socketId -> player
     this.dirty = false;
     this.channel = `farm:${farm.id}`;
@@ -119,7 +120,7 @@ class Room {
         time: this.state.time, money: this.state.money,
         tiles: this.state.tiles, objects: this.state.objects, bin: this.state.bin,
         animals: this.state.animals, eggs: this.state.eggs, buildings: this.state.buildings,
-        forage: this.state.forage,
+        forage: this.state.forage, quest: this.state.quest,
       },
       crops: CROPS,
       recipes: RECIPES,
@@ -493,6 +494,28 @@ class Room {
     this.addItem(inv, def.give, def.qty || 1);
     this.dirty = true;
     socket.emit('inv', inv);
+  }
+
+  // Entregar o pedido do quadro de recados: dá a recompensa e sorteia o próximo.
+  onDeliverQuest(socket) {
+    const p = this.players.get(socket.id);
+    if (!p) return;
+    const s = this.state;
+    const q = s.quest;
+    if (!q) return;
+    if (!W.BUILDINGS.some(b => b.type === 'board' && this.near(p, b.x, b.y))) {
+      socket.emit('err', { code: 'need_board' }); return;
+    }
+    const inv = this.inv(p.userId);
+    if ((inv.items[q.item] || 0) < q.qty) { socket.emit('err', { code: 'quest_missing_items' }); return; }
+    this.addItem(inv, q.item, -q.qty);
+    s.money += q.reward;
+    s.quest = pickQuest();
+    this.dirty = true;
+    this.emit('quest', { quest: s.quest });
+    this.emit('money', { money: s.money });
+    socket.emit('inv', inv);
+    this.emit('questDelivered', { name: p.name, item: q.item, qty: q.qty, reward: q.reward });
   }
 
   // Comer: recupera energia e consome 1 do item (frutas/cogumelos)

@@ -55,6 +55,12 @@
   "craft.make": "Craft",
   "craft.fenceDesc": "fence — select it in the hotbar and click on grass to place it",
 
+  "quest.title": "📋 Notice Board",
+  "quest.hint": "Deliver what's requested for coins — a new request appears afterward.",
+  "quest.reward": "Reward: 💰{reward}",
+  "quest.deliver": "Deliver",
+  "quest.deliveredChat": "{name} delivered {qty}x {item} from the board (+{reward})!",
+
   "bin.title": "📦 Shipping Bin",
   "bin.hint": "Put items here — payment arrives when everyone sleeps.",
   "bin.content": "In the bin:",
@@ -85,6 +91,8 @@
   "err.no_materials": "Not enough materials.",
   "err.bad_spot": "Can't build here — pick a flat, clear spot.",
   "err.need_bench": "Get closer to the crafting bench (near the house).",
+  "err.need_board": "Get closer to the notice board (in the plaza).",
+  "err.quest_missing_items": "You don't have enough items for this request.",
   "err.no_money": "Not enough money.",
   "err.bad_credentials": "Wrong e-mail or password.",
   "err.email_taken": "This e-mail is already registered.",
@@ -124,5 +132,6 @@
   "interact.sleep": "Sleep (E)",
   "interact.shop": "Shop (E)",
   "interact.bin": "Sell (E)",
-  "interact.bench": "Craft (E)"
+  "interact.bench": "Craft (E)",
+  "interact.board": "View request (E)"
 }

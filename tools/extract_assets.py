@@ -139,6 +139,9 @@ load(p("Buildings", "House_Decor", "Anvil_Anim.png")).crop((0, 0, 16, 16)).save(
 fence_sheet = load(p("Outdoor decoration", "Fences.png"))
 fence_sheet.crop((0, 48, 16, 64)).resize((32, 32), Image.NEAREST).save(o("icons/item_fence.png"))  # poste isolado (frame 12, mask=0)
 
+# ---------- quadro de recados (missões) ----------
+load(p("Outdoor decoration", "Signs.png")).crop((0, 81, 16, 113)).save(o("board.png"))  # placa retangular c/ poste e sombra, 16x32
+
 # ---------- prédios e NPC ----------
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_2_Wood_Base_Red.png")).save(o("house.png"))   # 144x128
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_1_Wood_Base_Blue.png")).save(o("shop.png"))   # 96x128

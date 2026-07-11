@@ -1,7 +1,7 @@
 // Cena principal do jogo (Phaser 3) — renderização do mundo, movimento com
 // predição local, jogadores remotos, ações de fazenda e interações.
 import { connect } from './net.js';
-import { Hud, TOOLS } from './hud.js';
+import { Hud, TOOLS, itemName } from './hud.js';
 import { t } from './i18n.js';
 
 const CROP_ORDER = ['turnip', 'potato', 'carrot', 'strawberry', 'tomato', 'corn', 'pepper', 'onion', 'cabbage', 'beet'];
@@ -97,6 +97,7 @@ class GameScene extends Phaser.Scene {
     L.image('well', '/assets/well.png');
     L.image('bench', '/assets/bench.png');
     L.image('anvil', '/assets/anvil.png');
+    L.image('board', '/assets/board.png');
     L.image('hay', '/assets/hay.png');
     L.image('log_fallen', '/assets/log_fallen.png');
     L.image('coop', '/assets/coop.png');
@@ -168,6 +169,7 @@ class GameScene extends Phaser.Scene {
       buy: (crop, qty) => this.socket.emit('buy', { crop, qty }),
       buyAnimal: () => this.socket.emit('buyAnimal'),
       craft: (recipe) => this.socket.emit('craft', { recipe }),
+      deliverQuest: () => this.socket.emit('deliverQuest'),
       sell: (item, qty) => this.socket.emit('sell', { item, qty }),
       cancelSleep: () => { this.socket.emit('sleep', false); this.hud.hideSleep(); },
     });
@@ -177,6 +179,7 @@ class GameScene extends Phaser.Scene {
     this.hud.setInv(d.you.inv);
     this.hud.setMoney(d.state.money);
     this.hud.setBin(d.state.bin);
+    this.hud.setQuest(d.state.quest);
     this.serverTime = d.state.time;
     this.serverTimeAt = performance.now();
     this.hud.setTime(d.state);
@@ -408,11 +411,14 @@ class GameScene extends Phaser.Scene {
       else if (b.type === 'well') this.add.image(bx, by, 'well').setOrigin(0, 1).setDepth(depth);
       else if (b.type === 'coop') this.add.image(bx, by, 'coop').setOrigin(0, 1).setDepth(depth);
       else if (b.type === 'bench') this.add.image(bx + T / 2, by, 'anvil').setOrigin(0.5, 1).setScale(1.6).setDepth(depth);
+      else if (b.type === 'board') this.add.image(bx + T / 2, by, 'board').setOrigin(0.5, 1).setScale(1.25).setDepth(depth);
       // só portas interativas geram dica/atalho E
       if (b.door && ['house', 'shop', 'bin'].includes(b.type)) {
         this.doors[b.type] = { x: b.door[0], y: b.door[1] + 1 };
       } else if (b.type === 'bench') {
         this.doors.bench = { x: b.x, y: b.y + b.h };
+      } else if (b.type === 'board') {
+        this.doors.board = { x: b.x, y: b.y + b.h };
       }
     }
     const shop = this.world.buildings.find(b => b.type === 'shop');
@@ -962,6 +968,7 @@ class GameScene extends Phaser.Scene {
     if (near(this.doors.shop)) this.hud.openShop();
     else if (near(this.doors.bin)) this.hud.openBin();
     else if (near(this.doors.bench)) this.hud.openCraft();
+    else if (near(this.doors.board)) this.hud.openQuest();
     else if (near(this.doors.house)) { this.socket.emit('sleep', true); this.hud.showSleep([]); }
   }
 
@@ -1001,6 +1008,10 @@ class GameScene extends Phaser.Scene {
     s.on('inv', (inv) => this.hud.setInv(inv));
     s.on('money', ({ money }) => this.hud.setMoney(money));
     s.on('bin', ({ bin }) => this.hud.setBin(bin));
+    s.on('quest', ({ quest }) => this.hud.setQuest(quest));
+    s.on('questDelivered', ({ name, item, qty, reward }) => {
+      this.hud.addChat('📋', t('quest.deliveredChat', { name, qty, item: itemName(item), reward }));
+    });
     s.on('time', (data) => {
       this.serverTime = data.time; this.serverTimeAt = performance.now();
       this.hud.setTime(data);

@@ -24,6 +24,7 @@ const BUILDINGS = [
   { type: 'bin',   x: 16, y: 10, w: 1, h: 1, door: [16, 10] }, // caixa de venda
   { type: 'well',  x: 13, y: 13, w: 2, h: 1 },                 // decorativo (sprite 32x48)
   { type: 'bench', x: 10, y: 12, w: 1, h: 1 },                 // bancada de fabricação, perto da casa
+  { type: 'board', x: 19, y: 11, w: 1, h: 1 },                 // quadro de recados, na praça
 ];
 
 // Prédios CONSTRUÍVEIS pelo jogador (comprados com materiais e posicionados).

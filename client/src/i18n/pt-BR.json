@@ -55,6 +55,12 @@
   "craft.make": "Fabricar",
   "craft.fenceDesc": "cerca — selecione na barra e clique na grama para plantar",
 
+  "quest.title": "📋 Quadro de Recados",
+  "quest.hint": "Entregue o que está pedindo e ganhe moedas — um novo pedido aparece depois.",
+  "quest.reward": "Recompensa: 💰{reward}",
+  "quest.deliver": "Entregar",
+  "quest.deliveredChat": "{name} entregou {qty}x {item} do quadro (+{reward})!",
+
   "bin.title": "📦 Caixa de Venda",
   "bin.hint": "Coloque itens aqui — o pagamento chega quando todos dormirem.",
   "bin.content": "Na caixa:",
@@ -85,6 +91,8 @@
   "err.no_materials": "Materiais insuficientes.",
   "err.bad_spot": "Não dá para construir aqui — escolha um lugar plano e livre.",
   "err.need_bench": "Aproxime-se da bancada de fabricação (perto da casa).",
+  "err.need_board": "Aproxime-se do quadro de recados (na praça).",
+  "err.quest_missing_items": "Você não tem itens suficientes para esse pedido.",
   "err.no_money": "Dinheiro insuficiente.",
   "err.bad_credentials": "E-mail ou senha incorretos.",
   "err.email_taken": "Este e-mail já está cadastrado.",
@@ -124,5 +132,6 @@
   "interact.sleep": "Dormir (E)",
   "interact.shop": "Loja (E)",
   "interact.bin": "Vender (E)",
-  "interact.bench": "Fabricar (E)"
+  "interact.bench": "Fabricar (E)",
+  "interact.board": "Ver pedido (E)"
 }
