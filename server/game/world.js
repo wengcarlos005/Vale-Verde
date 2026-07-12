@@ -1,6 +1,8 @@
-// Geração do mapa da fazenda (60x50 tiles de 16px).
+// Geração do mapa: fazenda (x0-59) + vila conectada por estrada a leste (x60-91),
+// tudo num único mundo/room (sem troca de mapa) — mais simples que rooms separadas
+// e já entrega "cidade + rota de transição" pedida pelo usuário.
 // Ground: 0 grama, 1 água, 2 estrada. Objetos (árvore/pedra) são mutáveis e vivem no estado.
-const WIDTH = 60;
+const WIDTH = 92;
 const HEIGHT = 50;
 const TILE = 16;
 
@@ -24,7 +26,9 @@ const BUILDINGS = [
   { type: 'bin',   x: 16, y: 10, w: 1, h: 1, door: [16, 10] }, // caixa de venda
   { type: 'well',  x: 13, y: 13, w: 2, h: 1 },                 // decorativo (sprite 32x48)
   { type: 'bench', x: 10, y: 12, w: 1, h: 1 },                 // bancada de fabricação, perto da casa
-  { type: 'board', x: 19, y: 11, w: 1, h: 1 },                 // quadro de recados, na praça
+  // vila (praça a leste, ligada por estrada) — quadro de recados morou pra lá.
+  { type: 'store', x: 79, y: 6, w: 9, h: 4, padBottom: 1 },    // casa de pedra, decorativa por ora (sprite 144x128)
+  { type: 'board', x: 83, y: 15, w: 1, h: 1 },                 // quadro de recados, na praça da vila
 ];
 
 // Prédios CONSTRUÍVEIS pelo jogador (comprados com materiais e posicionados).
@@ -105,9 +109,11 @@ function generateWorld(seed) {
   // Portão do campo: trecho curto de terra da praça até a cerca (abre o gap na cerca).
   rect(17, 12, 19, 14);
   // Caminho ao galinheiro/lago: sai da praça leste, contorna o campo pelo leste.
-  rect(25, 12, 39, 13);                 // faixa leste na altura da praça
+  rect(25, 12, 86, 13);                 // faixa leste na altura da praça — segue até a vila
   rect(38, 13, 39, 23);                 // desce pela lateral leste do campo até o quintal
   dirt(9, 10); dirt(10, 10); dirt(24, 10); dirt(25, 10); // frente das portas
+  // Vila: praça a leste da estrada, longe da fazenda — rota de transição entre as duas.
+  ellipse(80, 12.5, 9, 3);
 
   const inRect = (r, x, y, pad = 0) =>
     x >= r.x - pad && x < r.x + r.w + pad && y >= r.y - pad && y < r.y + r.h + pad;
@@ -137,12 +143,13 @@ function generateWorld(seed) {
       if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'fence' };
     }
   }
-  // Árvores, pedras, arbustos e tocos espalhados
+  // Árvores, pedras, arbustos e tocos espalhados (contagens escaladas p/ o mapa
+  // maior desde que a vila foi adicionada a leste, senão fica ralo demais lá).
   const SCATTER = [
-    [60, () => ({ type: 'tree', variant: treeVariant(), hp: 5 })],
-    [30, () => ({ type: 'rock', hp: 3 })],
-    [26, () => ({ type: 'bush', hp: 2 })],
-    [8,  () => ({ type: 'stump', hp: 2 })],
+    [92, () => ({ type: 'tree', variant: treeVariant(), hp: 5 })],
+    [46, () => ({ type: 'rock', hp: 3 })],
+    [40, () => ({ type: 'bush', hp: 2 })],
+    [12, () => ({ type: 'stump', hp: 2 })],
   ];
   for (const [count, make] of SCATTER) {
     let placed = 0, tries = 0;

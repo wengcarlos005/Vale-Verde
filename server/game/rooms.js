@@ -28,6 +28,7 @@ class Room {
     this.state = JSON.parse(farm.state);
     // O ground é estático e derivado do seed: regenera no load para fazendas antigas
     // receberem melhorias de mapa (praças de terra, caminhos, etc.).
+    const oldWidth = this.state.ground[0].length;
     const fresh = W.generateWorld(this.state.seed);
     this.state.ground = fresh.ground;
     // migração: remove objetos/tiles em posição inválida e adiciona cercas novas
@@ -52,6 +53,9 @@ class Room {
     if (!this.state.nextBuildingId) this.state.nextBuildingId = 1;
     if (!this.state.forage) { this.state.forage = {}; W.scatterForage(this.state, 25); }
     if (!this.state.quest) this.state.quest = pickQuest();
+    // migração: mapa cresceu (vila nova a leste) — fazendas salvas antes disso têm a
+    // área nova vazia (o SCATTER original só roda uma vez, na criação da fazenda).
+    if (oldWidth < W.WIDTH) this.respawnObjects(65);
     this.players = new Map(); // socketId -> player
     this.dirty = false;
     this.channel = `farm:${farm.id}`;

@@ -45,11 +45,21 @@ Próximos prédios (celeiro, estufa, silo, baú, cerca) entram como novas entrad
 
 ## Fase C — Novos cenários (cidade e além)
 
-- **Vila / cidade:** um segundo mapa conectado por uma estrada na borda norte. Tem lojas
-  (sementeiro, ferreiro, mercado), NPCs e o quadro de missões. Troca de mapa = novo "room"
-  no servidor com seu próprio estado; o jogador transita entre fazenda e vila.
+- ✅ **Vila (v1):** em vez de um "room"/mapa separado (que exigiria trocar de cenário, salvar
+  estado à parte, sincronizar handoff entre jogadores etc.), o mapa único cresceu pra leste
+  (60→92 tiles de largura) e ganhou uma praça de vila conectada à fazenda por uma estrada reta
+  bem longa — a "rota de transição" é literal, dá pra ver ela vindo de longe e caminhar até lá,
+  sem tela de carregamento. O **quadro de recados** morou pra lá (antes ficava na praça da
+  fazenda); tem também uma **casa de pedra** (arquitetura diferente da fazenda, pra dar
+  identidade própria à vila) — por ora só decorativa, sem loja ligada.
+  Próximo passo natural: dar função à casa de pedra (loja de verdade — sementeiro/ferreiro/
+  mercado) e povoar a vila com NPCs. Se um dia isso crescer demais pro mapa único ficar
+  gigante, aí sim vale considerar trocar pra rooms/mapas separados de verdade (a nota técnica
+  abaixo sobre `mapId` continua valendo como plano B).
+- **Mais bairros/vilarejos:** o mesmo padrão (praça + estrada) pode repetir em outras direções
+  do mapa (norte, sul) pra criar mais de um povoado, sem precisar de arquitetura nova.
 - **Mina / caverna:** entrada numa encosta; andares com pedras/minérios (o pack tem tiles de
-  caverna e minérios). Picareta coleta minério → forja na cidade.
+  caverna e minérios). Picareta coleta minério → forja na vila.
 - **Floresta / lago de pesca:** minigame de pesca no lago (o pack tem vara e peixes).
 
 ## Fase D — Progressão de longo prazo

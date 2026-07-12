@@ -98,6 +98,7 @@ class GameScene extends Phaser.Scene {
     L.image('bench', '/assets/bench.png');
     L.image('anvil', '/assets/anvil.png');
     L.image('board', '/assets/board.png');
+    L.image('store', '/assets/store.png');
     L.image('hay', '/assets/hay.png');
     L.image('log_fallen', '/assets/log_fallen.png');
     L.image('coop', '/assets/coop.png');
@@ -412,6 +413,7 @@ class GameScene extends Phaser.Scene {
       else if (b.type === 'coop') this.add.image(bx, by, 'coop').setOrigin(0, 1).setDepth(depth);
       else if (b.type === 'bench') this.add.image(bx + T / 2, by, 'anvil').setOrigin(0.5, 1).setScale(1.6).setDepth(depth);
       else if (b.type === 'board') this.add.image(bx + T / 2, by, 'board').setOrigin(0.5, 1).setScale(1.25).setDepth(depth);
+      else if (b.type === 'store') this.add.image(bx, by, 'store').setOrigin(0, 1).setDepth(depth);
       // só portas interativas geram dica/atalho E
       if (b.door && ['house', 'shop', 'bin'].includes(b.type)) {
         this.doors[b.type] = { x: b.door[0], y: b.door[1] + 1 };

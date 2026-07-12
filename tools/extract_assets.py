@@ -131,8 +131,9 @@ FORAGE_WORLD = {"berry": berry_bush, "mushroom": mushroom_world}
 for name, img in FORAGE_WORLD.items():
     img.save(o(f"forage_{name}.png"))                              # sprite do mundo 16x16
     img.resize((32, 32), Image.NEAREST).save(o(f"icons/item_{name}.png"))  # ícone reaproveitado p/ inventário
-# tronco pequeno coletável (metade do tronco caído)
-load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 7 * 16, 16, 8 * 16)).save(o("forage_log.png"))
+# tronco caído coletável — sprite INTEIRO (32x16); um crop de metade cortava o
+# tronco ao meio e deixava uma quina reta feia, sem parecer um objeto de verdade.
+load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 7 * 16, 32, 8 * 16)).save(o("forage_log.png"))
 
 # ---------- bancada de fabricação (fabricação simples) ----------
 load(p("Buildings", "House_Decor", "Anvil_Anim.png")).crop((0, 0, 16, 16)).save(o("anvil.png"))  # frame estático 16x16
@@ -141,6 +142,11 @@ fence_sheet.crop((0, 48, 16, 64)).resize((32, 32), Image.NEAREST).save(o("icons/
 
 # ---------- quadro de recados (missões) ----------
 load(p("Outdoor decoration", "Signs.png")).crop((0, 81, 16, 113)).save(o("board.png"))  # placa retangular c/ poste e sombra, 16x32
+
+# ---------- vila (Fase C) ----------
+# Casa de pedra (arquitetura diferente da fazenda, pra vila ter identidade própria).
+# Por ora decorativa (sem loja funcional ligada ainda).
+load(p("Buildings", "Buildings", "Houses", "Stone", "House_3_Stone_Base_Blue.png")).save(o("store.png"))  # 144x128
 
 # ---------- prédios e NPC ----------
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_2_Wood_Base_Red.png")).save(o("house.png"))   # 144x128
