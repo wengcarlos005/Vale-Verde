@@ -330,7 +330,19 @@ class GameScene extends Phaser.Scene {
     };
     const g = this.world.ground;
     const W_ = this.world.width, H_ = this.world.height;
-    const nearBuilding = (x, y) => this.world.buildings.some(b => x >= b.x - 1 && x < b.x + b.w + 1 && y >= b.y - 4 && y < b.y + b.h + 1);
+    // Espelha world.js (buildingVisual + coopYard) — decoração puramente cosmética
+    // (tufos de grama, cogumelos, banco/feno/tronco) não pode "nascer" em cima de
+    // prédios construídos pelo jogador nem no quintal do galinheiro (onde as
+    // galinhas ciscam), senão parece brotar de dentro da construção.
+    const nearBuilding = (x, y) => {
+      if (this.world.buildings.some(b => x >= b.x - 1 && x < b.x + b.w + 1 && y >= b.y - 4 && y < b.y + b.h + 1)) return true;
+      for (const b of this.buildingsState) {
+        const vis = b.vis != null ? b.vis : 4;
+        if (x >= b.x - 1 && x < b.x + b.w + 1 && y >= b.y - vis && y < b.y + b.h + 1) return true;
+        if (b.type === 'coop' && x >= b.x - 1 && x < b.x + b.w + 1 && y >= b.y + b.h && y < b.y + b.h + 4) return true;
+      }
+      return false;
+    };
     const grassTile = (x, y) => g[y][x] === 0 && !nearBuilding(x, y);
 
     // tufos de grama e flores espalhados

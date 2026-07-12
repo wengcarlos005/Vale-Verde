@@ -262,12 +262,13 @@ class Room {
   respawnObjects(n) {
     const s = this.state;
     let tries = 0;
-    while (n > 0 && tries++ < 200) {
+    while (n > 0 && tries++ < 1000) {
       const x = 1 + Math.floor(Math.random() * (W.WIDTH - 2));
       const y = 1 + Math.floor(Math.random() * (W.HEIGHT - 2));
       const key = `${x},${y}`;
       const inFarm = x >= W.FARMLAND.x - 2 && x < W.FARMLAND.x + W.FARMLAND.w + 2 && y >= W.FARMLAND.y - 2 && y < W.FARMLAND.y + W.FARMLAND.h + 2;
-      if (s.ground[y][x] !== 0 || s.objects[key] || s.tiles[key] || inFarm || W.inBuildingVisual(x, y)) continue;
+      if (s.ground[y][x] !== 0 || s.tiles[key] || inFarm || W.inBuildingVisual(x, y) || W.inPlayerBuildingOrYard(s, x, y)) continue;
+      if (W.hasNearbyContent(s, x, y)) continue;
       s.objects[key] = Math.random() < 0.6 ? { type: 'tree', hp: 5 } : { type: 'rock', hp: 3 };
       n--;
     }

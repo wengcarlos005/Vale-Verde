@@ -57,6 +57,33 @@ function inBuildingVisual(x, y) {
   return BUILDINGS.some(b => buildingVisual(b, x, y));
 }
 
+// Prédios construídos pelo jogador (ex.: galinheiro) + o quintal dos galinheiros —
+// scatter/forrageio não pode nascer em cima disso (senão "nasce" pedra/árvore dentro
+// do galinheiro ou no meio das galinhas).
+function inPlayerBuildingOrYard(state, x, y) {
+  for (const b of state.buildings || []) {
+    if (buildingVisual(b, x, y)) return true;
+    if (b.type === 'coop') {
+      const yard = coopYard(b);
+      if (x >= yard.x && x < yard.x + yard.w && y >= yard.y && y < yard.y + yard.h) return true;
+    }
+  }
+  return false;
+}
+
+// Verifica se já existe objeto/forrageável num raio ao redor de (x,y) — os sprites
+// de árvore/pedra/etc são maiores que 1 tile, então só bloquear o tile exato ainda
+// deixa vizinhos colados visualmente. radius=1 dá 1 tile de respiro entre objetos.
+function hasNearbyContent(state, x, y, radius = 1) {
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const key = `${x + dx},${y + dy}`;
+      if (state.objects[key] || (state.forage && state.forage[key])) return true;
+    }
+  }
+  return false;
+}
+
 // Verifica se um novo prédio (bx,by,w,h, com overhang visual `vis` acima da base)
 // cabe sem encostar em nenhum prédio existente — evita telhados/paredes se
 // sobrepondo visualmente quando o jogador constrói perto demais de outro prédio.
@@ -151,12 +178,13 @@ function generateWorld(seed) {
     [40, () => ({ type: 'bush', hp: 2 })],
     [12, () => ({ type: 'stump', hp: 2 })],
   ];
+  const scatterState = { objects }; // wrapper só pra reusar hasNearbyContent
   for (const [count, make] of SCATTER) {
     let placed = 0, tries = 0;
-    while (placed < count && tries++ < 800) {
+    while (placed < count && tries++ < 2000) {
       const x = 1 + Math.floor(rnd() * (WIDTH - 2));
       const y = 1 + Math.floor(rnd() * (HEIGHT - 2));
-      if (blocked(x, y) || objects[`${x},${y}`]) continue;
+      if (blocked(x, y) || hasNearbyContent(scatterState, x, y)) continue;
       objects[`${x},${y}`] = make();
       placed++;
     }
@@ -193,13 +221,14 @@ function scatterForage(state, n, rnd = Math.random) {
   const types = ['berry', 'mushroom', 'mushroom', 'log'];
   const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
   let tries = 0;
-  while (n > 0 && tries++ < 400) {
+  while (n > 0 && tries++ < 1200) {
     const x = 1 + Math.floor(rnd() * (WIDTH - 2));
     const y = 1 + Math.floor(rnd() * (HEIGHT - 2));
     const key = `${x},${y}`;
     if (state.ground[y][x] !== 0) continue;
-    if (state.objects[key] || state.tiles[key] || state.forage[key]) continue;
-    if (inRect(FARMLAND, x, y) || inBuildingVisual(x, y)) continue;
+    if (state.tiles[key]) continue;
+    if (inRect(FARMLAND, x, y) || inBuildingVisual(x, y) || inPlayerBuildingOrYard(state, x, y)) continue;
+    if (hasNearbyContent(state, x, y)) continue;
     state.forage[key] = { type: types[Math.floor(rnd() * types.length)] };
     n--;
   }
@@ -208,4 +237,5 @@ function scatterForage(state, n, rnd = Math.random) {
 module.exports = {
   WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN,
   generateWorld, initialFarmState, inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
+  inPlayerBuildingOrYard, hasNearbyContent,
 };
