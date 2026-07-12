@@ -11,7 +11,7 @@ export function itemIcon(id) {
   return `/assets/icons/item_${id}.png`;
 }
 
-const RESOURCE_PRICE = { wood: 3, stone: 3, egg: 50, berry: 20, mushroom: 25 };
+const RESOURCE_PRICE = { wood: 3, stone: 3, egg: 50, berry: 20, mushroom: 25, iron: 15, copper: 25, gold: 55 };
 export const FOODS = new Set(['berry', 'mushroom']);
 
 const CRAFTED_ITEMS = new Set(['fence']);

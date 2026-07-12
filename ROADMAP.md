@@ -56,11 +56,19 @@ Próximos prédios (celeiro, estufa, silo, baú, cerca) entram como novas entrad
   mercado) e povoar a vila com NPCs. Se um dia isso crescer demais pro mapa único ficar
   gigante, aí sim vale considerar trocar pra rooms/mapas separados de verdade (a nota técnica
   abaixo sobre `mapId` continua valendo como plano B).
+- ✅ **Porto Vale (cidade grande) + mina + praia:** mapa cresceu de novo (92×50 → 150×80).
+  A estrada da vila continua até Porto Vale, cidade litorânea maior com 2 casas
+  decorativas de arquitetura própria (calcário bege + madeira verde). Uma bifurcação
+  nova sai perto da praça da vila e desce pro sul, dividindo em dois ramais: **mina**
+  (chão de caverna cercado por parede, entrada esculpida na rocha) e **praia** (areia +
+  oceano aberto em costa diagonal, sem lago redondo). A mina já tem minério de verdade:
+  ferro/cobre/ouro (raridade decrescente) espalhados só lá dentro, minerados com a
+  picareta igual pedra, vendáveis na caixa. Porto Vale e a praia ainda são só
+  cenário/atmosfera — sem loja ligada nem pesca. Próximo passo natural: dar função às
+  casas de Porto Vale (ferreiro/sementeiro/mercado — o ferro/cobre/ouro já mineráveis
+  pedem uma forja) e o minigame de pesca na praia/lago.
 - **Mais bairros/vilarejos:** o mesmo padrão (praça + estrada) pode repetir em outras direções
-  do mapa (norte, sul) pra criar mais de um povoado, sem precisar de arquitetura nova.
-- **Mina / caverna:** entrada numa encosta; andares com pedras/minérios (o pack tem tiles de
-  caverna e minérios). Picareta coleta minério → forja na vila.
-- **Floresta / lago de pesca:** minigame de pesca no lago (o pack tem vara e peixes).
+  do mapa pra criar mais povoados, sem precisar de arquitetura nova.
 
 ## Fase D — Progressão de longo prazo
 

@@ -32,10 +32,15 @@ class Room {
     const oldHeight = this.state.ground.length;
     const fresh = W.generateWorld(this.state.seed);
     this.state.ground = fresh.ground;
-    // migração: remove objetos/tiles em posição inválida e adiciona cercas/paredes novas
+    // migração: remove objetos/tiles em posição inválida e adiciona cercas/paredes novas.
+    // Minério só é válido em chão de caverna (ground 3); todo o resto (árvore/pedra/
+    // cerca/parede/etc.) só em grama (0) — sem essa distinção, minério era apagado
+    // sozinho a cada load, já que a checagem antiga só aceitava grama.
     for (const key of Object.keys(this.state.objects)) {
       const [x, y] = key.split(',').map(Number);
-      if (W.inBuildingVisual(x, y) || this.state.ground[y][x] !== 0) delete this.state.objects[key];
+      const obj = this.state.objects[key];
+      const validGround = this.state.ground[y][x] === (obj.type === 'ore' ? 3 : 0);
+      if (W.inBuildingVisual(x, y) || !validGround) delete this.state.objects[key];
     }
     for (const key of Object.keys(this.state.tiles)) {
       const [x, y] = key.split(',').map(Number);
@@ -372,12 +377,15 @@ class Room {
     } else if (type === 'chop' || type === 'mine') {
       if (!obj) return;
       const choppable = ['tree', 'bush', 'stump'];
-      if (type === 'chop' ? !choppable.includes(obj.type) : obj.type !== 'rock') return;
+      const mineable = ['rock', 'ore'];
+      if (type === 'chop' ? !choppable.includes(obj.type) : !mineable.includes(obj.type)) return;
       if (!this.spend(inv, COST[type], socket)) return;
       obj.hp--;
       if (obj.hp <= 0) {
         delete s.objects[key];
-        const drop = obj.type === 'rock' ? ['stone', 3] : ['wood', obj.type === 'tree' ? 3 : 1];
+        const drop = obj.type === 'rock' ? ['stone', 3]
+          : obj.type === 'ore' ? [obj.mineral, 2]
+          : ['wood', obj.type === 'tree' ? 3 : 1];
         this.addItem(inv, drop[0], drop[1]);
         this.emit('object', { key, obj: null });
         socket.emit('inv', inv);

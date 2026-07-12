@@ -9,6 +9,8 @@ const WIDTH = 150;
 const HEIGHT = 80;
 const TILE = 16;
 
+const { ORE_SPAWN } = require('./crops');
+
 function mulberry32(seed) {
   return function () {
     seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
@@ -242,6 +244,18 @@ function generateWorld(seed) {
       placed++;
     }
   }
+
+  // Minérios: só no chão de caverna da mina, raridade decrescente (ORE_SPAWN).
+  for (const [mineral, count] of ORE_SPAWN) {
+    let placed = 0, tries = 0;
+    while (placed < count && tries++ < 1000) {
+      const x = MINA.x + Math.floor(rnd() * MINA.w);
+      const y = MINA.y + Math.floor(rnd() * MINA.h);
+      if (ground[y][x] !== 3 || hasNearbyContent(scatterState, x, y)) continue;
+      objects[`${x},${y}`] = { type: 'ore', mineral, hp: 3 };
+      placed++;
+    }
+  }
   return { ground, objects };
 }
 
@@ -288,7 +302,7 @@ function scatterForage(state, n, rnd = Math.random) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN,
+  WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, MINA, PRAIA,
   generateWorld, initialFarmState, inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
   inPlayerBuildingOrYard, hasNearbyContent,
 };

@@ -154,6 +154,15 @@ load(p("Tiles", "Cave", "Cave_Walls.png")).crop((16, 96, 32, 128)).save(o("cavew
 load(p("Tiles", "Beach", "Beach_Tiles.png")).crop((14, 17, 30, 33)).save(o("sand.png"))  # recorte plano do centro do blob de areia
 load(p("Tiles", "Cliff", "Stone_Cliff_1_Cave_Entrance.png")).save(o("mine_entrance.png"))  # arco esculpido na rocha, 48x48, decorativo (sem colisão)
 
+# Minérios: linha = mineral (0 ferro, 1 cobre, 2 ouro), coluna 3 = estágio com o
+# minério bem exposto/colorido (colunas 0-2 são quase só pedra cinza, pouco legíveis).
+ores = load(p("Outdoor decoration", "Ores.png"))
+ORE_ROWS = {"iron": 0, "copper": 1, "gold": 2}
+for name, row in ORE_ROWS.items():
+    cell = ores.crop((3 * 16, row * 16, 4 * 16, row * 16 + 16))
+    cell.save(o(f"ore_{name}.png"))
+    cell.resize((32, 32), Image.NEAREST).save(o(f"icons/item_{name}.png"))
+
 # ---------- Porto Vale (cidade grande, Fase C) ----------
 # Arquiteturas diferentes da fazenda (madeira vermelha) e da vila (pedra azul), pra
 # cidade grande ter identidade própria. Ambas decorativas por ora.

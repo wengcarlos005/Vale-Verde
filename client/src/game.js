@@ -103,6 +103,7 @@ class GameScene extends Phaser.Scene {
     L.spritesheet('sand', '/assets/sand.png', { frameWidth: T, frameHeight: T });
     L.image('cavewall', '/assets/cavewall.png');
     L.image('mine_entrance', '/assets/mine_entrance.png');
+    for (const m of ['iron', 'copper', 'gold']) L.image(`ore_${m}`, `/assets/ore_${m}.png`);
     L.image('city_hall', '/assets/city_hall.png');
     L.image('city_house', '/assets/city_house.png');
     L.image('hay', '/assets/hay.png');
@@ -559,6 +560,8 @@ class GameScene extends Phaser.Scene {
       sprite = this.add.image(x * T, y * T, 'fence', FENCE_MAP[mask]).setOrigin(0).setDepth(by);
     } else if (obj.type === 'cavewall') {
       sprite = this.add.image(cx, by, 'cavewall').setOrigin(0.5, 1).setDepth(by);
+    } else if (obj.type === 'ore') {
+      sprite = this.add.image(cx, by, `ore_${obj.mineral}`).setOrigin(0.5, 1).setDepth(by);
     } else {
       sprite = this.add.image(cx, by, 'stump').setOrigin(0.5, 1).setDepth(by);
     }
@@ -939,10 +942,11 @@ class GameScene extends Phaser.Scene {
 
     let type = null, extra = {};
     if (obj && obj.type !== 'fence' && obj.type !== 'cavewall') {
-      // exige a ferramenta certa: machado para madeira, picareta para pedra
-      const needed = obj.type === 'rock' ? 'pickaxe' : 'axe';
+      // exige a ferramenta certa: machado para madeira, picareta para pedra/minério
+      const mineable = obj.type === 'rock' || obj.type === 'ore';
+      const needed = mineable ? 'pickaxe' : 'axe';
       if (!item || item.id !== needed) { this.hud.toast(t('err.wrong_tool')); return; }
-      type = obj.type === 'rock' ? 'mine' : 'chop';
+      type = mineable ? 'mine' : 'chop';
     } else if (tile && tile.crop) {
       const ready = tile.crop.dead || tile.crop.daysGrown >= this.crops[tile.crop.id].days;
       if (ready) type = 'harvest';

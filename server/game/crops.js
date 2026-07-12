@@ -21,7 +21,18 @@ const RESOURCES = {
   egg:   { sellPrice: 50 },
   berry: { sellPrice: 20 },
   mushroom: { sellPrice: 25 },
+  // minérios da mina (Fase C) — raridade decrescente: ferro comum, cobre médio, ouro raro.
+  iron: { sellPrice: 15 },
+  copper: { sellPrice: 25 },
+  gold: { sellPrice: 55 },
 };
+
+// Minérios espalhados pela mina, com raridade (contagem) decrescente.
+const ORE_SPAWN = [
+  ['iron', 26],
+  ['copper', 16],
+  ['gold', 6],
+];
 
 // Comida: recupera energia ao comer.
 const FOOD = {
@@ -66,4 +77,4 @@ function stageOf(crop, daysGrown) {
   return Math.min(3, Math.floor((daysGrown / def.days) * 4));
 }
 
-module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
+module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
