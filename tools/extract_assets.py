@@ -148,6 +148,11 @@ load(p("Outdoor decoration", "Signs.png")).crop((0, 81, 16, 113)).save(o("board.
 # Por ora decorativa (sem loja funcional ligada ainda).
 load(p("Buildings", "Buildings", "Houses", "Stone", "House_3_Stone_Base_Blue.png")).save(o("store.png"))  # 144x128
 
+# ---------- mina e praia (Fase C, mundo completo) ----------
+load(p("Tiles", "Cave", "Cave_Floor_1.png")).crop((0, 0, 16, 16)).save(o("cave_floor.png"))
+load(p("Tiles", "Cave", "Cave_Walls.png")).crop((16, 96, 32, 128)).save(o("cavewall.png"))  # parede/viga, 16x32
+load(p("Tiles", "Beach", "Beach_Tiles.png")).crop((14, 17, 30, 33)).save(o("sand.png"))  # recorte plano do centro do blob de areia
+
 # ---------- prédios e NPC ----------
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_2_Wood_Base_Red.png")).save(o("house.png"))   # 144x128
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_1_Wood_Base_Blue.png")).save(o("shop.png"))   # 96x128

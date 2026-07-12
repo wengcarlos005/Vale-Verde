@@ -99,6 +99,9 @@ class GameScene extends Phaser.Scene {
     L.image('anvil', '/assets/anvil.png');
     L.image('board', '/assets/board.png');
     L.image('store', '/assets/store.png');
+    L.spritesheet('cave_floor', '/assets/cave_floor.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('sand', '/assets/sand.png', { frameWidth: T, frameHeight: T });
+    L.image('cavewall', '/assets/cavewall.png');
     L.image('hay', '/assets/hay.png');
     L.image('log_fallen', '/assets/log_fallen.png');
     L.image('coop', '/assets/coop.png');
@@ -314,6 +317,14 @@ class GameScene extends Phaser.Scene {
           this.waterSprites.push(this.add.sprite(x * T, y * T, 'water', 0).setOrigin(0).setDepth(-6));
           const f = pondFrame(x, y);
           if (f !== 17) rimRt.drawFrame('gtiles', f, x * T, y * T);
+        } else if (v === 3) {
+          rt.drawFrame('cave_floor', 0, x * T, y * T);
+        } else if (v === 4) {
+          rt.drawFrame('sand', 0, x * T, y * T);
+        } else if (v === 5) {
+          // oceano da praia: mesma água animada do lago, mas sem a moldura de grama
+          // do lago (aqui a borda é com areia, não faria sentido reusar o rim verde).
+          this.waterSprites.push(this.add.sprite(x * T, y * T, 'water', 0).setOrigin(0).setDepth(-6));
         }
       }
     }
@@ -540,6 +551,8 @@ class GameScene extends Phaser.Scene {
       const f = (xx, yy) => this.objectsState[`${xx},${yy}`]?.type === 'fence' ? 1 : 0;
       const mask = f(x, y - 1) | (f(x + 1, y) << 1) | (f(x, y + 1) << 2) | (f(x - 1, y) << 3);
       sprite = this.add.image(x * T, y * T, 'fence', FENCE_MAP[mask]).setOrigin(0).setDepth(by);
+    } else if (obj.type === 'cavewall') {
+      sprite = this.add.image(cx, by, 'cavewall').setOrigin(0.5, 1).setDepth(by);
     } else {
       sprite = this.add.image(cx, by, 'stump').setOrigin(0.5, 1).setDepth(by);
     }
@@ -742,7 +755,7 @@ class GameScene extends Phaser.Scene {
   blockedAt(px, py) {
     const x = Math.floor(px / T), y = Math.floor(py / T);
     if (x < 0 || y < 0 || x >= this.world.width || y >= this.world.height) return true;
-    if (this.world.ground[y][x] === 1) return true;
+    if (this.world.ground[y][x] === 1 || this.world.ground[y][x] === 5) return true; // água (lago/oceano)
     if (this.objectsState[`${x},${y}`]) return true;
     const key = `${x},${y}`;
     if (this.propBlockers && this.propBlockers.has(key)) return true;
@@ -919,7 +932,7 @@ class GameScene extends Phaser.Scene {
     else me.dir = dyT > 0 ? 'down' : 'up';
 
     let type = null, extra = {};
-    if (obj && obj.type !== 'fence') {
+    if (obj && obj.type !== 'fence' && obj.type !== 'cavewall') {
       // exige a ferramenta certa: machado para madeira, picareta para pedra
       const needed = obj.type === 'rock' ? 'pickaxe' : 'axe';
       if (!item || item.id !== needed) { this.hud.toast(t('err.wrong_tool')); return; }

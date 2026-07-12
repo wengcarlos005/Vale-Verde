@@ -1,9 +1,12 @@
-// Geração do mapa: fazenda (x0-59) + vila conectada por estrada a leste (x60-91),
-// tudo num único mundo/room (sem troca de mapa) — mais simples que rooms separadas
-// e já entrega "cidade + rota de transição" pedida pelo usuário.
-// Ground: 0 grama, 1 água, 2 estrada. Objetos (árvore/pedra) são mutáveis e vivem no estado.
-const WIDTH = 92;
-const HEIGHT = 50;
+// Geração do mapa: fazenda (x0-59) + vila (x60-91) + Porto Vale, cidade grande e
+// litorânea (x92-149) na faixa norte; mina (x25-64,y60-77) e praia (x100-149,y60-79)
+// na faixa sul, ligadas por uma bifurcação que sai perto da praça da vila. Tudo num
+// único mundo/room (sem troca de mapa) — mesmo padrão da fazenda→vila, só cresce
+// WIDTH/HEIGHT e pinta a região nova.
+// Ground: 0 grama, 1 água (lago), 2 estrada, 3 chão de caverna, 4 areia, 5 água (oceano).
+// Objetos (árvore/pedra/minério/parede de caverna) são mutáveis e vivem no estado.
+const WIDTH = 150;
+const HEIGHT = 80;
 const TILE = 16;
 
 function mulberry32(seed) {
@@ -103,6 +106,11 @@ function buildingSpotFree(state, bx, by, w, h, vis, sidePad = 1) {
 const POND = { x: 44, y: 36, w: 12, h: 10 };
 const FARMLAND = { x: 8, y: 15, w: 29, h: 17 }; // área mantida livre de objetos
 const SPAWN = { x: 18, y: 12 };
+// Mina: retângulo de chão de caverna cercado por paredes-objeto; entrada no lado
+// norte, onde o ramal sul da estrada chega.
+const MINA = { x: 25, y: 60, w: 40, h: 18 };
+// Praia: areia com franja pro mar aberto (não um lago redondo) no canto sul-leste.
+const PRAIA = { x: 100, y: 60, w: 50, h: 20 };
 
 function generateWorld(seed) {
   const rnd = mulberry32(seed);
@@ -136,11 +144,38 @@ function generateWorld(seed) {
   // Portão do campo: trecho curto de terra da praça até a cerca (abre o gap na cerca).
   rect(17, 12, 19, 14);
   // Caminho ao galinheiro/lago: sai da praça leste, contorna o campo pelo leste.
-  rect(25, 12, 86, 13);                 // faixa leste na altura da praça — segue até a vila
+  rect(25, 12, 143, 13);                // faixa leste na altura da praça — segue até Porto Vale
   rect(38, 13, 39, 23);                 // desce pela lateral leste do campo até o quintal
   dirt(9, 10); dirt(10, 10); dirt(24, 10); dirt(25, 10); // frente das portas
   // Vila: praça a leste da estrada, longe da fazenda — rota de transição entre as duas.
   ellipse(80, 12.5, 9, 3);
+  // Porto Vale: cidade grande e litorânea, no fim da estrada leste.
+  ellipse(120, 12.5, 15, 4);
+  // Bifurcação sul: sai perto do cruzamento da vila, desce e se divide em dois ramais
+  // (mina a oeste, praia a leste) — a "rota de transição" pras áreas novas do sul.
+  rect(64, 13, 66, 52);                 // corredor vertical principal
+  rect(43, 50, 118, 52);                // faixa leste-oeste ligando os dois ramais
+  rect(43, 52, 47, 60);                 // ramal oeste até a entrada da mina
+  rect(114, 52, 118, 66);               // ramal leste até a praia
+
+  // Mina: chão de caverna preenchendo o retângulo; a parede (objeto, adicionada mais
+  // abaixo) contorna por fora e abre um vão exatamente onde a estrada já chega —
+  // mesmo truque do portão da cerca da fazenda (o anel só vira parede em grama, e
+  // ali já virou estrada antes).
+  for (let y = MINA.y; y < MINA.y + MINA.h; y++)
+    for (let x = MINA.x; x < MINA.x + MINA.w; x++)
+      if (ground[y][x] === 0) ground[y][x] = 3;
+
+  // Praia: areia cobrindo a região toda; oceano aberto na diagonal sul-leste (costa
+  // reta, não um lago redondo) — chega até a borda do mapa de propósito, pra não ter
+  // parede de árvore ali e parecer que o mar continua além da tela.
+  for (let y = PRAIA.y; y < PRAIA.y + PRAIA.h; y++) {
+    for (let x = PRAIA.x; x < PRAIA.x + PRAIA.w; x++) {
+      if (ground[y][x] !== 0) continue;
+      const dx = x - PRAIA.x, dy = y - PRAIA.y;
+      ground[y][x] = (dx + dy * 1.4 > PRAIA.w * 0.55) ? 5 : 4;
+    }
+  }
 
   const inRect = (r, x, y, pad = 0) =>
     x >= r.x - pad && x < r.x + r.w + pad && y >= r.y - pad && y < r.y + r.h + pad;
@@ -168,6 +203,18 @@ function generateWorld(seed) {
   for (let y = FARMLAND.y - 1; y <= FARMLAND.y + FARMLAND.h; y++) {
     for (const x of [FARMLAND.x - 1, FARMLAND.x + FARMLAND.w]) {
       if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'fence' };
+    }
+  }
+  // Parede da mina: contorna o retângulo de chão de caverna; some sozinha onde a
+  // estrada de acesso já virou chão de caverna/estrada (mesmo truque do portão acima).
+  for (let x = MINA.x - 1; x <= MINA.x + MINA.w; x++) {
+    for (const y of [MINA.y - 1, MINA.y + MINA.h]) {
+      if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'cavewall' };
+    }
+  }
+  for (let y = MINA.y - 1; y <= MINA.y + MINA.h; y++) {
+    for (const x of [MINA.x - 1, MINA.x + MINA.w]) {
+      if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'cavewall' };
     }
   }
   // Árvores, pedras, arbustos e tocos espalhados (contagens escaladas p/ o mapa

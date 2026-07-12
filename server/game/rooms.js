@@ -29,9 +29,10 @@ class Room {
     // O ground é estático e derivado do seed: regenera no load para fazendas antigas
     // receberem melhorias de mapa (praças de terra, caminhos, etc.).
     const oldWidth = this.state.ground[0].length;
+    const oldHeight = this.state.ground.length;
     const fresh = W.generateWorld(this.state.seed);
     this.state.ground = fresh.ground;
-    // migração: remove objetos/tiles em posição inválida e adiciona cercas novas
+    // migração: remove objetos/tiles em posição inválida e adiciona cercas/paredes novas
     for (const key of Object.keys(this.state.objects)) {
       const [x, y] = key.split(',').map(Number);
       if (W.inBuildingVisual(x, y) || this.state.ground[y][x] !== 0) delete this.state.objects[key];
@@ -41,7 +42,8 @@ class Room {
       if (this.state.ground[y][x] !== 0 || W.inBuildingVisual(x, y)) delete this.state.tiles[key];
     }
     for (const [key, obj] of Object.entries(fresh.objects)) {
-      if (obj.type === 'fence' && !this.state.objects[key] && !this.state.tiles[key]) {
+      const structural = obj.type === 'fence' || obj.type === 'cavewall';
+      if (structural && !this.state.objects[key] && !this.state.tiles[key]) {
         this.state.objects[key] = obj;
       }
     }
@@ -53,9 +55,13 @@ class Room {
     if (!this.state.nextBuildingId) this.state.nextBuildingId = 1;
     if (!this.state.forage) { this.state.forage = {}; W.scatterForage(this.state, 25); }
     if (!this.state.quest) this.state.quest = pickQuest();
-    // migração: mapa cresceu (vila nova a leste) — fazendas salvas antes disso têm a
-    // área nova vazia (o SCATTER original só roda uma vez, na criação da fazenda).
-    if (oldWidth < W.WIDTH) this.respawnObjects(65);
+    // migração: mapa cresceu (vila a leste, depois mina/praia/Porto Vale ao sul e mais
+    // a leste) — fazendas salvas antes disso têm a área nova vazia (o SCATTER original
+    // só roda uma vez, na criação da fazenda). Densidade proporcional à área nova.
+    if (oldWidth < W.WIDTH || oldHeight < W.HEIGHT) {
+      const oldTiles = oldWidth * oldHeight, newTiles = W.WIDTH * W.HEIGHT;
+      this.respawnObjects(Math.round((newTiles - oldTiles) * 0.03));
+    }
     this.players = new Map(); // socketId -> player
     this.dirty = false;
     this.channel = `farm:${farm.id}`;
