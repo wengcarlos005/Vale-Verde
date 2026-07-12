@@ -32,6 +32,12 @@ const BUILDINGS = [
   // vila (praça a leste, ligada por estrada) — quadro de recados morou pra lá.
   { type: 'store', x: 79, y: 6, w: 9, h: 4, padBottom: 1 },    // casa de pedra, decorativa por ora (sprite 144x128)
   { type: 'board', x: 83, y: 15, w: 1, h: 1 },                 // quadro de recados, na praça da vila
+  // Porto Vale (cidade grande e litorânea, fim da estrada leste) — decorativas por ora.
+  { type: 'city_hall',  x: 108, y: 5, w: 9, h: 4, padBottom: 1 }, // calcário bege (sprite 144x128)
+  { type: 'city_house', x: 122, y: 6, w: 7, h: 3, padBottom: 1 }, // madeira verde (sprite 112x96)
+  // Mina — arco esculpido na rocha, puramente decorativo (h todo virou padBottom: o
+  // jogador tem que poder atravessar o vão andando, não é uma porta/parede de verdade).
+  { type: 'mine_entrance', x: 44, y: 57, w: 3, h: 3, padBottom: 3 },
 ];
 
 // Prédios CONSTRUÍVEIS pelo jogador (comprados com materiais e posicionados).

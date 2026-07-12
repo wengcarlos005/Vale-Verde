@@ -102,6 +102,9 @@ class GameScene extends Phaser.Scene {
     L.spritesheet('cave_floor', '/assets/cave_floor.png', { frameWidth: T, frameHeight: T });
     L.spritesheet('sand', '/assets/sand.png', { frameWidth: T, frameHeight: T });
     L.image('cavewall', '/assets/cavewall.png');
+    L.image('mine_entrance', '/assets/mine_entrance.png');
+    L.image('city_hall', '/assets/city_hall.png');
+    L.image('city_house', '/assets/city_house.png');
     L.image('hay', '/assets/hay.png');
     L.image('log_fallen', '/assets/log_fallen.png');
     L.image('coop', '/assets/coop.png');
@@ -437,6 +440,9 @@ class GameScene extends Phaser.Scene {
       else if (b.type === 'bench') this.add.image(bx + T / 2, by, 'anvil').setOrigin(0.5, 1).setScale(1.6).setDepth(depth);
       else if (b.type === 'board') this.add.image(bx + T / 2, by, 'board').setOrigin(0.5, 1).setScale(1.25).setDepth(depth);
       else if (b.type === 'store') this.add.image(bx, by, 'store').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'city_hall') this.add.image(bx, by, 'city_hall').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'city_house') this.add.image(bx, by, 'city_house').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'mine_entrance') this.add.image(bx, by, 'mine_entrance').setOrigin(0, 1).setDepth(depth);
       // só portas interativas geram dica/atalho E
       if (b.door && ['house', 'shop', 'bin'].includes(b.type)) {
         this.doors[b.type] = { x: b.door[0], y: b.door[1] + 1 };

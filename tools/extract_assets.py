@@ -152,6 +152,13 @@ load(p("Buildings", "Buildings", "Houses", "Stone", "House_3_Stone_Base_Blue.png
 load(p("Tiles", "Cave", "Cave_Floor_1.png")).crop((0, 0, 16, 16)).save(o("cave_floor.png"))
 load(p("Tiles", "Cave", "Cave_Walls.png")).crop((16, 96, 32, 128)).save(o("cavewall.png"))  # parede/viga, 16x32
 load(p("Tiles", "Beach", "Beach_Tiles.png")).crop((14, 17, 30, 33)).save(o("sand.png"))  # recorte plano do centro do blob de areia
+load(p("Tiles", "Cliff", "Stone_Cliff_1_Cave_Entrance.png")).save(o("mine_entrance.png"))  # arco esculpido na rocha, 48x48, decorativo (sem colisão)
+
+# ---------- Porto Vale (cidade grande, Fase C) ----------
+# Arquiteturas diferentes da fazenda (madeira vermelha) e da vila (pedra azul), pra
+# cidade grande ter identidade própria. Ambas decorativas por ora.
+load(p("Buildings", "Buildings", "Houses", "Limestone", "House_2_Limestone_Base_Blue.png")).save(o("city_hall.png"))  # 144x128
+load(p("Buildings", "Buildings", "Houses", "Wood", "House_4_Wood_Green_Blue.png")).save(o("city_house.png"))  # 112x96
 
 # ---------- prédios e NPC ----------
 load(p("Buildings", "Buildings", "Houses", "Wood", "House_2_Wood_Base_Red.png")).save(o("house.png"))   # 144x128
