@@ -124,6 +124,7 @@ class GameScene extends Phaser.Scene {
     L.image('interior_wall', '/assets/interior_wall.png');
     L.image('bed', '/assets/bed.png');
     L.image('table', '/assets/table.png');
+    L.image('rug', '/assets/rug.png');
     for (const m of ['iron', 'copper', 'gold']) L.image(`ore_${m}`, `/assets/ore_${m}.png`);
     L.image('city_hall', '/assets/city_hall.png');
     L.image('city_house', '/assets/city_house.png');
@@ -268,8 +269,20 @@ class GameScene extends Phaser.Scene {
     this.rebuildPlayerLayers(this.me, app);
 
     // câmera
-    this.cameras.main.setBounds(0, 0, this.world.width * T, this.world.height * T);
+    // Mapas menores que o viewport (interiores 11x8, salas da mina) não devem ficar
+    // ancorados no canto superior-esquerdo com o resto da tela em branco — os bounds
+    // do Phaser só "centralizam" quando o mapa preenche o viewport inteiro. Se o mapa é
+    // menor que o viewport num eixo, os bounds desse eixo viram do TAMANHO do viewport
+    // (deslocados pra sobrar metade de cada lado), então a câmera não tem margem pra
+    // rolar e o mapa sempre aparece centralizado, parado — exatamente o efeito desejado
+    // numa sala estática pequena. Mapas grandes (overworld/south/portovale) continuam
+    // com o comportamento de sempre (bounds = mapa, segue o jogador).
     const zoom = Math.max(2, Math.min(4, Math.round(Math.min(window.innerWidth, window.innerHeight * 1.6) / 320)));
+    const mapW = this.world.width * T, mapH = this.world.height * T;
+    const viewW = window.innerWidth / zoom, viewH = window.innerHeight / zoom;
+    const boundsW = Math.max(mapW, viewW), boundsX = mapW >= viewW ? 0 : (mapW - viewW) / 2;
+    const boundsH = Math.max(mapH, viewH), boundsY = mapH >= viewH ? 0 : (mapH - viewH) / 2;
+    this.cameras.main.setBounds(boundsX, boundsY, boundsW, boundsH);
     this.cameras.main.setZoom(zoom);
     this.cameras.main.startFollow(meP.container, true, 0.15, 0.15);
 
@@ -656,6 +669,10 @@ class GameScene extends Phaser.Scene {
       sprite = this.add.image(cx, by, 'cavewall').setOrigin(0.5, 1).setDepth(by);
     } else if (obj.type === 'ore') {
       sprite = this.add.image(cx, by, `ore_${obj.mineral}`).setOrigin(0.5, 1).setDepth(by);
+    } else if (obj.type === 'rug') {
+      // decoração de chão (3x3) — depth fixo BAIXO (mesma faixa de decor_grass/mushroom),
+      // nunca deve competir com jogador/móveis pelo depth-sort baseado em y.
+      sprite = this.add.image(x * T, by, 'rug').setOrigin(0, 1).setDepth(-5);
     } else if (obj.type === 'wall') {
       sprite = this.add.image(x * T, y * T, 'interior_wall').setOrigin(0).setDepth(by);
     } else if (obj.type === 'bed') {
@@ -865,7 +882,8 @@ class GameScene extends Phaser.Scene {
     const x = Math.floor(px / T), y = Math.floor(py / T);
     if (x < 0 || y < 0 || x >= this.world.width || y >= this.world.height) return true;
     if (this.world.ground[y][x] === 1 || this.world.ground[y][x] === 5) return true; // água (lago/oceano)
-    if (this.objectsState[`${x},${y}`]) return true;
+    const hereObj = this.objectsState[`${x},${y}`];
+    if (hereObj && hereObj.type !== 'rug') return true; // tapete é decoração de chão, não bloqueia
     const key = `${x},${y}`;
     if (this.propBlockers && this.propBlockers.has(key)) return true;
     if (this.npcBlockers && this.npcBlockers.has(key)) return true;
@@ -1228,6 +1246,21 @@ class GameScene extends Phaser.Scene {
         this.playAnim(me, 'idle', me.dir);
       }
       me.container.setDepth(me.container.y);
+    }
+
+    // Travessia de borda do mapa (edge_*) dispara sozinha ao encostar — diferente de
+    // porta/escada/mina, que continuam exigindo E (tela cheia de conteúdo, o jogador
+    // pode só estar passando perto sem querer entrar). `_enteringMap` evita reemitir a
+    // cada frame enquanto o servidor ainda não respondeu com o novo mapa.
+    if (!this._enteringMap) {
+      const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
+      for (const e of this.entrances) {
+        if (e.kind.startsWith('edge_') && Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1) {
+          this._enteringMap = true;
+          this.socket.emit('enterMap');
+          break;
+        }
+      }
     }
 
     // envio de posição (10 Hz)

@@ -365,6 +365,7 @@ function makeInterior(kind) {
   for (let y = 0; y < h; y++) { objects[`0,${y}`] = { type: 'wall' }; objects[`${w - 1},${y}`] = { type: 'wall' }; }
   const interactables = [];
   if (kind === 'house') {
+    objects['1,5'] = { type: 'rug' };            // tapete decorativo (3x3, sem colisão) sob/à frente da cama
     objects['2,2'] = { type: 'bed' };            // cama (E → dormir)
     interactables.push({ at: [2, 2], kind: 'bed' });
     objects['6,2'] = { type: 'table' };          // mesa decorativa (sprite ~3 tiles, cabe em 6-8)

@@ -159,12 +159,16 @@ load(p("Tiles", "Beach", "Beach_Decor_Tiles.png")).save(o("sand_decor.png"))  # 
 load(p("Tiles", "Cliff", "Stone_Cliff_1_Cave_Entrance.png")).save(o("mine_entrance.png"))  # arco esculpido na rocha, 48x48, decorativo (sem colisão)
 load(p("Tiles", "Cave", "Cave_Floor_Ladder.png")).save(o("ladder.png"))  # escada da mina (subir/descer nível), 16x16
 
-# ---------- interiores de casa (Fase C: telas de dentro) ----------
-OLD = os.path.join(os.path.dirname(PACK), "..", "Old_Sprites_Extracted", "Old_Sprites")
-Image.open(os.path.join(OLD, "Walls", "Wood_Floor_1.png")).convert("RGBA").save(o("interior_floor.png"))  # 16x16 tábua
-Image.open(os.path.join(OLD, "Walls", "House_Wood.png")).convert("RGBA").crop((32, 0, 48, 16)).save(o("interior_wall.png"))  # tábua horizontal, 16x16
+# ---------- interiores de casa (Fase C: telas de dentro; refeito 2026-07-13 com os
+# assets DEDICADOS de interior do próprio pack Cute Fantasy — antes usava texturas
+# genéricas do pack "Old_Sprites" que destoavam do resto do jogo ("paredes feias"). Ref.
+# visual: Sprites CuteRPG/Mapas/OXGfbx.jpg (cômodos com parede de tijolo + piso de tábua
+# + tapete).
+load(p("Buildings", "Houses_Interiors", "Brick_Wall_Fillers.png")).crop((0, 0, 16, 16)).save(o("interior_wall.png"))  # tijolo, 16x16, tileável
+load(p("Buildings", "Houses_Interiors", "Wood_Floor_Tiles.png")).crop((96, 16, 112, 32)).save(o("interior_floor.png"))  # tábua diagonal, 16x16, tileável
+load(p("Buildings", "House_Decor", "Carpets.png")).crop((0, 400, 48, 448)).save(o("rug.png"))  # tapete vermelho 3x3 (48x48), decoração de chão sem colisão
 load(p("Buildings", "House_Decor", "Beds.png")).crop((0, 160, 32, 192)).save(o("bed.png"))     # cama de casal vermelha, 32x32
-load(p("Buildings", "House_Decor", "Tables.png")).crop((4, 20, 52, 54)).save(o("table.png"))   # mesa/balcão de madeira (bbox justo), 48x34
+load(p("Buildings", "House_Decor", "Tables.png")).crop((8, 24, 58, 57)).save(o("table.png"))   # mesa/balcão de madeira (bbox justo — crop antigo cortava o topo), 50x33
 
 # Minérios: linha = mineral (0 ferro, 1 cobre, 2 ouro), coluna 3 = estágio com o
 # minério bem exposto/colorido (colunas 0-2 são quase só pedra cinza, pouco legíveis).
