@@ -26,6 +26,7 @@
   "chat.placeholder": "Aperte Enter para conversar...",
 
   "loading.connecting": "Conectando ao servidor...",
+  "loading.waking": "Acordando o servidor (plano grátis)... pode levar ~1 min na primeira vez.",
   "loading.assets": "Carregando o mundo...",
   "loading.ready": "Pronto!",
 

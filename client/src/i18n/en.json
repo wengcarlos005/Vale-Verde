@@ -26,6 +26,7 @@
   "chat.placeholder": "Press Enter to chat...",
 
   "loading.connecting": "Connecting to server...",
+  "loading.waking": "Waking up the server (free tier)... may take ~1 min the first time.",
   "loading.assets": "Loading the world...",
   "loading.ready": "Ready!",
 

@@ -54,10 +54,14 @@ export function startGame(farm) {
   const socket = connect(farm.id);
   socket.on('connect_error', (e) => { console.error('[greenvale] connect_error', e.message); loading(8, 'loading.connecting'); });
   socket.io.on('reconnect_attempt', () => loading(8, 'loading.connecting'));
+  // No plano grátis do Render o servidor "dorme" após ~15 min ocioso e leva ~30-60s pra
+  // acordar. Se o 'joined' demorar, troca a mensagem pra explicar (senão parece travado).
+  const wakeTimer = setTimeout(() => { if (window.gvBoot !== 'joined') loading(null, 'loading.waking'); }, 9000);
   // 'joined' chega no login E a cada troca de tela (overworld ↔ mina/interior). Toda vez
   // reconstrói a cena com o novo mapa — a tela de carregamento cobre, e como as texturas
   // ficam em cache o reload é rápido.
   socket.on('joined', (data) => {
+    clearTimeout(wakeTimer);
     window.gvBoot = 'joined';
     loading(20, 'loading.assets');
     if (game) { game.destroy(true); game = null; }
