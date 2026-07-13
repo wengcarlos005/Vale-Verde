@@ -10,9 +10,10 @@ const WIDTH = 92;
 const HEIGHT = 50;
 const TILE = 16;
 
-// Dimensões dos mapas "ao ar livre" separados (Porto Vale e o ramal sul).
+// Dimensões dos mapas "ao ar livre" separados (Porto Vale, ramal sul, cidade da mina).
 const PV_W = 60, PV_H = 36;
 const SOUTH_W = 100, SOUTH_H = 46;
+const PED_W = 50, PED_H = 36;
 
 function mulberry32(seed) {
   return function () {
@@ -44,11 +45,9 @@ const BUILDINGS = {
     { type: 'city_hall',  x: 22, y: 7, w: 9, h: 4, padBottom: 1 }, // calcário bege (sprite 144x128)
     { type: 'city_house', x: 36, y: 8, w: 7, h: 3, padBottom: 1 }, // madeira verde (sprite 112x96)
   ],
-  // Ramal sul (mina + praia) — tela própria (entrada na borda norte).
+  // Ramal sul (praia/porto) — tela própria (entrada na borda norte, saída pra
+  // Pedreira na borda sul). A mina MOROU pra lá (ver comentário em BUILDINGS.pedreira).
   south: [
-    // Mina — arco esculpido na rocha, puramente decorativo (h todo virou padBottom: o
-    // jogador tem que poder atravessar o vão andando, não é uma porta/parede de verdade).
-    { type: 'mine_entrance', x: 23, y: 18, w: 3, h: 3, padBottom: 3 },
     // Porto: barquinho animado (bóia) ancorado na areia, de frente pra uma pequena
     // enseada de oceano — decorativo, dá vida ao "porto" pedido sem depender do
     // tileset de doca (autotile complexo demais pra compor à mão com robustez).
@@ -58,6 +57,14 @@ const BUILDINGS = {
     { type: 'cabin_green', x: 34, y: 25, w: 6, h: 4, padBottom: 1 },
     { type: 'cabin_dark',  x: 42, y: 25, w: 6, h: 4, padBottom: 1 },
     { type: 'cabin_green', x: 34, y: 34, w: 6, h: 4, padBottom: 1 },
+  ],
+  // Pedreira — cidade pequena focada em mineração, tela própria (entrada na borda
+  // norte, vindo do ramal sul). Mapa rochoso (scatter pesado de pedra); a mina agora
+  // fica embutida numa parede de pedra de verdade (ver `stone_wall` em generatePedreira),
+  // como o sprite do arco pede — antes ela estava largada solta na grama do ramal sul.
+  pedreira: [
+    { type: 'mine_entrance', x: 23, y: 14, w: 3, h: 3, padBottom: 3 },
+    { type: 'store', x: 8, y: 9, w: 9, h: 4, padBottom: 1 },  // posto de mineração (casa de pedra), decorativo por ora
   ],
 };
 
@@ -280,8 +287,9 @@ function generateSouth(seed) {
   rect(48, 0, 52, 14);                  // estrada da borda norte até o cruzamento
   rect(20, 12, 51, 14);                 // faixa leste-oeste — só até a beira da praia (PRAIA.x=52),
                                          // pra não cortar um pedaço de estrada dentro da areia
-  rect(23, 14, 27, 20);                 // ramal oeste até a entrada da mina
-  ellipse(25, 20, 4, 3);                // clareira da entrada da mina
+  rect(23, 14, 27, SOUTH_H - 2);        // ramal oeste, agora desce até a borda sul (Pedreira)
+  ellipse(25, 20, 4, 3);                // clareira/trilha no meio do ramal
+  openEdge(ground, SOUTH_W, SOUTH_H, 23, SOUTH_H - 2, 27, SOUTH_H - 1); // sul → Pedreira
   paintBeach(ground, SOUTH_W, SOUTH_H, PRAIA);
 
   const objects = {};
@@ -296,6 +304,42 @@ function generateSouth(seed) {
   return { ground, objects, w: SOUTH_W, h: SOUTH_H, spawn: [50, 2] };
 }
 
+// ---------------- Pedreira (cidade de mineração) — tela própria, entrada na borda norte ----------------
+// Mapa rochoso: a mina fica embutida numa parede de pedra de verdade (o sprite do arco
+// pressupõe isso — antes ele estava largado solto na grama do ramal sul).
+function generatePedreira(seed) {
+  const rnd = mulberry32(seed ^ 0x50454452);
+  const ground = [];
+  for (let y = 0; y < PED_H; y++) ground.push(new Array(PED_W).fill(0));
+  const { ellipse, rect } = terrainTools(ground, PED_W, PED_H);
+  rect(23, 0, 27, 17);                  // estrada da borda norte até a praça da mina
+  ellipse(24, 17, 8, 4);                // praça em frente à mina
+  rect(10, 12, 23, 14);                 // ramal até o posto de mineração
+  openEdge(ground, PED_W, PED_H, 23, 0, 27, 1); // norte → south
+
+  const objects = {};
+  const treeVariant = () => (rnd() < 0.7 ? 'oak' : 'birch');
+  borderTrees(ground, objects, PED_W, PED_H, treeVariant);
+
+  // Parede de pedra flanqueando o arco da mina — 2 blocos de 4 colunas x 3 linhas (mesma
+  // altura do arco), formando uma face de rocha contínua com o portal no meio.
+  const mine = BUILDINGS.pedreira.find(b => b.type === 'mine_entrance');
+  for (const side of [-1, 1]) {
+    for (let dx = 1; dx <= 4; dx++) {
+      const x = side < 0 ? mine.x - dx : mine.x + mine.w - 1 + dx;
+      for (let dy = 0; dy < mine.h; dy++) objects[`${x},${mine.y + dy}`] = { type: 'stone_wall' };
+    }
+  }
+
+  // Scatter pesado em pedra (rochoso/mineração) — poucas árvores, quase sem arbusto.
+  scatterOnMap('pedreira', ground, objects, PED_W, PED_H, rnd, [
+    [55, () => ({ type: 'rock', hp: 3 })],
+    [10, () => ({ type: 'tree', variant: treeVariant(), hp: 5 })],
+    [8, () => ({ type: 'bush', hp: 2 })],
+  ]);
+  return { ground, objects, w: PED_W, h: PED_H, spawn: [25, 2] };
+}
+
 // ---------------- telas separadas (mina) ----------------
 // A mina é uma sequência de telas próprias (mine:1, mine:2, ...), entradas pelo prédio
 // mine_entrance no overworld. Cada nível é uma sala de caverna com escada pra descer
@@ -303,8 +347,8 @@ function generateSouth(seed) {
 const MINE_W = 34, MINE_H = 22;
 const MINE_UP = [3, 3];                       // escada de subir/sair (canto sup-esq)
 const MINE_DOWN = [MINE_W - 4, MINE_H - 4];   // escada de descer (canto inf-dir)
-// Tile do mapa 'south' onde o jogador reaparece ao sair da mina (logo abaixo do prédio).
-const MINE_ENTRANCE_RETURN = [24, 22];
+// Tile do mapa 'pedreira' onde o jogador reaparece ao sair da mina (logo abaixo do prédio).
+const MINE_ENTRANCE_RETURN = [24, 17];
 
 function depthOf(mapKey) { return Number(String(mapKey).split(':')[1]) || 1; }
 
@@ -341,7 +385,7 @@ function makeMineLevel(seed, depth) {
     }
   }
   const entrances = [
-    { at: MINE_UP, kind: 'ladder_up', to: depth === 1 ? 'south' : `mine:${depth - 1}`,
+    { at: MINE_UP, kind: 'ladder_up', to: depth === 1 ? 'pedreira' : `mine:${depth - 1}`,
       toSpawn: depth === 1 ? MINE_ENTRANCE_RETURN : [MINE_DOWN[0], MINE_DOWN[1] - 1] },
     { at: MINE_DOWN, kind: 'ladder_down', to: `mine:${depth + 1}`, toSpawn: [MINE_UP[0], MINE_UP[1] + 1] },
   ];
@@ -398,6 +442,10 @@ const EDGE_LINKS = {
   ],
   south: [
     { at: [50, 0], kind: 'edge_north', to: 'overworld', toSpawn: [65, HEIGHT - 3] },
+    { at: [25, SOUTH_H - 1], kind: 'edge_south', to: 'pedreira', toSpawn: [Math.floor(PED_W / 2), 2] },
+  ],
+  pedreira: [
+    { at: [25, 0], kind: 'edge_north', to: 'south', toSpawn: [25, SOUTH_H - 3] },
   ],
 };
 
@@ -462,8 +510,8 @@ function scatterForage(state, n, rnd = Math.random) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, TILE, PV_W, PV_H, SOUTH_W, SOUTH_H, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA, MINE_W, MINE_H,
-  generateOverworld, generatePortoVale, generateSouth, initialFarmState,
+  WIDTH, HEIGHT, TILE, PV_W, PV_H, SOUTH_W, SOUTH_H, PED_W, PED_H, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA, MINE_W, MINE_H,
+  generateOverworld, generatePortoVale, generateSouth, generatePedreira, initialFarmState,
   inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
   inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, makeInterior, worldEntrances, depthOf,
 };

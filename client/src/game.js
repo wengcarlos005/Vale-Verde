@@ -133,6 +133,7 @@ class GameScene extends Phaser.Scene {
     L.image('rug', '/assets/rug.png');
     L.image('shelf', '/assets/shelf.png');
     L.image('chest', '/assets/chest.png');
+    L.image('stone_wall', '/assets/stone_wall.png');
     for (const m of ['iron', 'copper', 'gold']) L.image(`ore_${m}`, `/assets/ore_${m}.png`);
     L.image('city_hall', '/assets/city_hall.png');
     L.image('city_house', '/assets/city_house.png');
@@ -680,6 +681,8 @@ class GameScene extends Phaser.Scene {
       sprite = this.add.image(x * T, y * T, 'fence', FENCE_MAP[mask]).setOrigin(0).setDepth(by);
     } else if (obj.type === 'cavewall') {
       sprite = this.add.image(cx, by, 'cavewall').setOrigin(0.5, 1).setDepth(by);
+    } else if (obj.type === 'stone_wall') {
+      sprite = this.add.image(x * T, y * T, 'stone_wall').setOrigin(0).setDepth(by);
     } else if (obj.type === 'ore') {
       sprite = this.add.image(cx, by, `ore_${obj.mineral}`).setOrigin(0.5, 1).setDepth(by);
     } else if (obj.type === 'rug') {

@@ -172,6 +172,11 @@ load(p("Buildings", "House_Decor", "Tables.png")).crop((8, 24, 58, 57)).save(o("
 load(p("Buildings", "House_Decor", "BookShelves.png")).crop((65, 1, 95, 31)).save(o("shelf.png"))  # prateleira c/ potes coloridos, 30x30 — dá "cara de loja" pro interior
 load(p("Buildings", "House_Decor", "Chest_Anim.png")).crop((0, 0, 16, 16)).save(o("chest.png"))    # baú fechado (frame estático), 16x16, decoração de mercadoria
 
+# Parede de pedra (Pedreira, Fase D): painel de rocha listrada do MESMO tileset da
+# entrada da mina (Stone_Cliff_1_*), pra combinar visualmente — crop de uma faixa
+# central (sem a franja de grama do topo nem o cascalho da base) pra ficar tileável.
+load(p("Tiles", "Cliff", "Stone_Cliff_1_Tile.png")).crop((144, 40, 160, 56)).save(o("stone_wall.png"))
+
 # Minérios: linha = mineral (0 ferro, 1 cobre, 2 ouro), coluna 3 = estágio com o
 # minério bem exposto/colorido (colunas 0-2 são quase só pedra cinza, pouco legíveis).
 ores = load(p("Outdoor decoration", "Ores.png"))

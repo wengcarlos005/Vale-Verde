@@ -120,17 +120,22 @@ class Room {
         let gen, entrances;
         if (mapKey === 'portovale') { gen = W.generatePortoVale(this.state.seed); entrances = W.worldEntrances('portovale'); }
         else if (mapKey === 'south') { gen = W.generateSouth(this.state.seed); entrances = W.worldEntrances('south'); }
+        else if (mapKey === 'pedreira') { gen = W.generatePedreira(this.state.seed); entrances = W.worldEntrances('pedreira'); }
         else { gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey)); entrances = gen.entrances; }
         if (!this.state.maps) this.state.maps = {};
         if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {} };
         const saved = this.state.maps[mapKey];
         // Migração: terreno "ao ar livre" é sempre regerado do código atual (não salvo),
         // então se a geração mudar (praia cresceu, estrada mudou de forma...) um objeto
-        // persistido (árvore/pedra/arbusto/toco) pode ficar preso em cima de areia/água/
-        // estrada que antes era grama. Limpa qualquer objeto fora de grama — mesmo
-        // princípio da limpeza de validGround que já existe pro overworld.
-        if (mapKey === 'south' || mapKey === 'portovale') {
+        // ESPALHADO (árvore/pedra/arbusto/toco) pode ficar preso em cima de areia/água/
+        // estrada que antes era grama. Limpa qualquer um fora de grama — mesmo princípio
+        // da limpeza de validGround que já existe pro overworld. NÃO mexe em fixtures
+        // colocadas de propósito pelo gerador (ex.: stone_wall pode legitimamente ficar
+        // sobre estrada/praça, como acontece na Pedreira).
+        if (mapKey === 'south' || mapKey === 'portovale' || mapKey === 'pedreira') {
+          const scatterTypes = new Set(['tree', 'rock', 'bush', 'stump']);
           for (const okey of Object.keys(saved.objects)) {
+            if (!scatterTypes.has(saved.objects[okey].type)) continue;
             const [ox, oy] = okey.split(',').map(Number);
             if (!(gen.ground[oy] && gen.ground[oy][ox] === 0)) { delete saved.objects[okey]; this.dirty = true; }
           }
