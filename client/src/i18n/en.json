@@ -67,6 +67,18 @@
   "quest.deliver": "Deliver",
   "quest.deliveredChat": "{name} delivered {qty}x {item} from the board (+{reward})!",
 
+  "progress.title": "📖 Vale Verde Progress",
+  "progress.hint": "What the farm has discovered so far — it's co-op, it counts for everyone.",
+  "progress.crops": "🌾 Crops harvested",
+  "progress.minerals": "💎 Ores mined",
+  "progress.monsters": "⚔️ Monsters defeated",
+  "progress.mine": "⛏️ Deepest mine level",
+  "progress.mineHint": "The mine has 100 levels — the deeper you go, the rarer the ore and the tougher the monsters.",
+  "mob.slime_small": "Small Slime",
+  "mob.slime_medium": "Medium Slime",
+  "mob.slime_big": "Big Slime",
+  "mob.skeleton": "Skeleton",
+
   "bin.title": "📦 Shipping Bin",
   "bin.hint": "Put items here — payment arrives when everyone sleeps.",
   "bin.content": "In the bin:",

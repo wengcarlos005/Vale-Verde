@@ -69,6 +69,7 @@ class Room {
     if (!this.state.forage) { this.state.forage = {}; W.scatterForage(this.state, 25); }
     if (!this.state.quest) this.state.quest = pickQuest();
     if (!this.state.maps) this.state.maps = {}; // estado mutável das telas de mina
+    if (!this.state.discovered) this.state.discovered = { crops: [], minerals: [], monsters: [], maxDepth: 0 };
     // migração: mapa cresceu (vila a leste, depois mina/praia/Porto Vale ao sul e mais
     // a leste) — fazendas salvas antes disso têm a área nova vazia (o SCATTER original
     // só roda uma vez, na criação da fazenda). Densidade proporcional à área nova.
@@ -174,7 +175,7 @@ class Room {
         day: s.day, season: s.season, year: s.year, time: s.time, money: s.money,
         tiles: m.tiles, objects: m.objects, bin: s.bin,
         animals: isOw ? s.animals : [], eggs: m.eggs, buildings: isOw ? s.buildings : [],
-        forage: m.forage, quest: s.quest, monsters: m.monsters || {},
+        forage: m.forage, quest: s.quest, monsters: m.monsters || {}, discovered: s.discovered,
       },
       crops: CROPS,
       recipes: RECIPES,
@@ -198,6 +199,17 @@ class Room {
   }
 
   addItem(inv, id, qty) { inv.items[id] = (inv.items[id] || 0) + qty; if (inv.items[id] <= 0) delete inv.items[id]; }
+
+  // Registra a primeira vez que a FAZENDA (cooperativo — não é por jogador) colhe um
+  // cultivo, minera um minério ou derrota um tipo de monstro, pro menu de progresso.
+  // Emite só quando muda de verdade (evita spam a cada colheita repetida).
+  discover(category, id) {
+    const list = this.state.discovered[category];
+    if (list.includes(id)) return;
+    list.push(id);
+    this.dirty = true;
+    this.emit('discovered', this.state.discovered);
+  }
 
   near(player, x, y) {
     const px = Math.round(player.x / W.TILE), py = Math.round(player.y / W.TILE);
@@ -253,6 +265,10 @@ class Room {
     p.map = ent.to;
     p.x = ent.toSpawn[0] * W.TILE; p.y = ent.toSpawn[1] * W.TILE;
     p.dir = 'down'; p.anim = 'idle'; p.sleeping = false;
+    if (p.map.startsWith('mine:')) {
+      const depth = W.depthOf(p.map);
+      if (depth > this.state.discovered.maxDepth) { this.state.discovered.maxDepth = depth; this.emit('discovered', this.state.discovered); }
+    }
     socket.join(this.mapChannel(p.map));
     socket.emit('joined', this.mapPayload(p));
     socket.to(this.mapChannel(p.map)).emit('playerJoined', this.publicPlayer(p));
@@ -502,6 +518,7 @@ class Room {
       if (stageOf(tile.crop.id, tile.crop.daysGrown) !== 4) return;
       if (!this.spend(inv, COST.harvest, socket)) return;
       this.addItem(inv, tile.crop.id, 1);
+      this.discover('crops', tile.crop.id);
       tile.crop = null;
       patch(key);
       socket.emit('inv', inv);
@@ -514,6 +531,7 @@ class Room {
       obj.hp--;
       if (obj.hp <= 0) {
         delete m.objects[key];
+        if (obj.type === 'ore') this.discover('minerals', obj.mineral);
         const drop = obj.type === 'rock' ? ['stone', 3]
           : obj.type === 'ore' ? [obj.mineral, 2]
           : ['wood', obj.type === 'tree' ? 3 : 1];
@@ -679,6 +697,7 @@ class Room {
       const depth = W.depthOf(p.map);
       const reward = 5 + depth * 2 + Math.floor(Math.random() * 5);
       this.state.money += reward;
+      this.discover('monsters', mon.type);
       this.emitMap(p.map, 'monster', { id: monsterId, monster: null });
       this.emit('money', { money: this.state.money });
     } else {

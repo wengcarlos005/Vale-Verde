@@ -129,6 +129,25 @@
   .shop-item { display: flex; align-items: center; gap: 10px; background: #fffbee; border: 3px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; }
   .shop-item .grow { flex: 1; }
   .shop-item button { width: auto; margin: 0; padding: 6px 12px; font-size: 12px; }
+
+  #btn-progress {
+    position: absolute; top: 10px; left: 10px; z-index: 10; width: 40px; height: 40px;
+    background: var(--panel); border: 3px solid var(--border); border-radius: 8px;
+    font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .prog-section { margin-bottom: 14px; }
+  .prog-section h3 { font-size: 13px; margin: 0 0 6px; display: flex; justify-content: space-between; }
+  .prog-section h3 .count { color: #8a6d3b; font-weight: 700; }
+  .prog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; }
+  .prog-item {
+    background: #fffbee; border: 3px solid var(--border); border-radius: 8px; padding: 4px;
+    display: flex; align-items: center; justify-content: center; position: relative; aspect-ratio: 1;
+  }
+  .prog-item img { width: 26px; height: 26px; image-rendering: pixelated; }
+  .prog-item.locked { opacity: .35; filter: grayscale(1); }
+  .prog-item .prog-name { display: none; }
+  .prog-depth { background: #fffbee; border: 3px solid var(--border); border-radius: 8px; padding: 10px; font-size: 13px; }
+  .prog-depth .gl-bar { margin-top: 6px; }
   .shop-item img { width: 28px; height: 28px; image-rendering: pixelated; }
 
   #toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 40;
@@ -227,6 +246,7 @@
       <div class="gl-msg" id="gl-msg" data-i18n="loading.connecting"></div>
     </div>
   </div>
+  <button id="btn-progress" title="Progresso (P)">📖</button>
   <div class="hud" id="hud-clock"></div>
   <div class="hud" id="hud-energy"><div class="fill" style="height:100%"></div></div>
   <div class="hud" id="hud-health"><div class="fill" style="height:100%"></div></div>
@@ -269,6 +289,15 @@
     <div id="bin-sell-items"></div>
     <h2 style="margin-top:10px;font-size:14px" data-i18n="bin.content"></h2>
     <div id="bin-content" style="font-size:13px"></div>
+    <button class="secondary" data-close data-i18n="close"></button>
+  </div>
+</div>
+
+<div class="modal-back" id="modal-progress">
+  <div class="panel modal">
+    <h2 data-i18n="progress.title"></h2>
+    <div style="font-size:12px;margin-bottom:10px" data-i18n="progress.hint"></div>
+    <div id="progress-content"></div>
     <button class="secondary" data-close data-i18n="close"></button>
   </div>
 </div>

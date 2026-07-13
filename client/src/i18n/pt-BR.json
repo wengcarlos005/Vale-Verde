@@ -67,6 +67,18 @@
   "quest.deliver": "Entregar",
   "quest.deliveredChat": "{name} entregou {qty}x {item} do quadro (+{reward})!",
 
+  "progress.title": "📖 Progresso de Vale Verde",
+  "progress.hint": "O que a fazenda já descobriu — é cooperativo, conta pra todo mundo.",
+  "progress.crops": "🌾 Cultivos colhidos",
+  "progress.minerals": "💎 Minérios minerados",
+  "progress.monsters": "⚔️ Monstros derrotados",
+  "progress.mine": "⛏️ Nível mais fundo da mina",
+  "progress.mineHint": "A mina tem 100 níveis — quanto mais fundo, mais raro o minério e mais forte o monstro.",
+  "mob.slime_small": "Slime pequeno",
+  "mob.slime_medium": "Slime médio",
+  "mob.slime_big": "Slime grande",
+  "mob.skeleton": "Esqueleto",
+
   "bin.title": "📦 Caixa de Venda",
   "bin.hint": "Coloque itens aqui — o pagamento chega quando todos dormirem.",
   "bin.content": "Na caixa:",

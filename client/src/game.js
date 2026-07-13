@@ -88,7 +88,7 @@ export function startGame(farm) {
 // (troca de tela), senão os handlers da cena antiga ficariam duplicados no socket.
 const GAME_EVENTS = [
   'playerJoined', 'playerLeft', 'playerMoved', 'playerAppearance', 'chat', 'tile', 'object',
-  'egg', 'forage', 'monster', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
+  'egg', 'forage', 'monster', 'discovered', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
   'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect', 'connect',
 ];
 
@@ -239,6 +239,7 @@ class GameScene extends Phaser.Scene {
     this.hud.setMoney(d.state.money);
     this.hud.setBin(d.state.bin);
     this.hud.setQuest(d.state.quest);
+    this.hud.setDiscovered(d.state.discovered);
     this.serverTime = d.state.time;
     this.serverTimeAt = performance.now();
     this.hud.setTime(d.state);
@@ -1017,6 +1018,7 @@ class GameScene extends Phaser.Scene {
       if (ev.key >= '1' && ev.key <= '9') this.hud.select(Number(ev.key) - 1);
       if (ev.key === 'Enter') { ev.preventDefault(); this.hud.focusChat(); }
       if (ev.key.toLowerCase() === 'e') this.tryInteract();
+      if (ev.key.toLowerCase() === 'p') this.hud.openProgress();
       if (ev.key === ' ') {
         const me = this.players.get(this.me);
         const fx = Math.floor(me.container.x / T) + (me.dir === 'left' ? -1 : me.dir === 'right' ? 1 : 0);
@@ -1317,6 +1319,7 @@ class GameScene extends Phaser.Scene {
     s.on('egg', ({ key, egg }) => { if (egg) this.eggsState[key] = egg; else delete this.eggsState[key]; this.setEgg(key, egg); });
     s.on('forage', ({ key, item }) => { if (item) this.forageState[key] = item; else delete this.forageState[key]; this.setForage(key, item); });
     s.on('monster', ({ id, monster }) => { if (monster) this.monstersState[id] = monster; else delete this.monstersState[id]; this.updateMonster(id, monster); });
+    s.on('discovered', (d) => this.hud.setDiscovered(d));
     s.on('animals', ({ animals }) => this.setAnimals(animals));
     s.on('building', ({ building }) => {
       this.buildingsState.push(building);

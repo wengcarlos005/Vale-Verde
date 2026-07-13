@@ -352,7 +352,9 @@ MONSTER_SPRITES = {
 for name, (rel, fsize) in MONSTER_SPRITES.items():
     im = load(p("Enemies", rel))
     im.crop((0, 0, fsize * 4, fsize)).save(o(f"mob_{name}.png"))  # 4 frames idle
+    im.crop((0, 0, fsize, fsize)).resize((32, 32), Image.NEAREST).save(o(f"icons/mob_{name}.png"))  # 1 frame, ícone do menu de progresso
 skel = load(p("Enemies", "Skeleton", "Skeleton.png"))
 skel.crop((0, 0, 32 * 4, 32)).save(o("mob_skeleton.png"))  # 4 frames idle (linha 0)
+skel.crop((0, 0, 32, 32)).resize((32, 32), Image.NEAREST).save(o("icons/mob_skeleton.png"))
 
 print("assets ok:", len([f for r, _, fs in os.walk(OUT) for f in fs]))

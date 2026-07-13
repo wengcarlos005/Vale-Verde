@@ -35,7 +35,9 @@ export class Hud {
     this.selected = 0;
     this.crops = {};
     this.quest = null;
+    this.discovered = { crops: [], minerals: [], monsters: [], maxDepth: 0 };
     this.state = { money: 0, season: 0, day: 1, year: 1, time: 360, bin: [] };
+    $('btn-progress').addEventListener('click', () => this.openProgress());
 
     $('chat-input').addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -343,6 +345,50 @@ export class Hud {
       ? this.state.bin.map(e => `${itemName(e.item)} ×${e.qty}`).join(', ')
       : t('bin.empty');
     $('bin-content').textContent = content;
+  }
+
+  // ---------- progresso/coleção ----------
+  // Referência de tudo que EXISTE hoje pra descobrir (cultivos/minérios/monstros) — o
+  // menu mostra cada categoria como "descobertos/total", cinza-e-cadeado até a fazenda
+  // (é cooperativo, não por jogador) colher/minerar/derrotar aquilo pela primeira vez.
+  setDiscovered(d) {
+    this.discovered = d || { crops: [], minerals: [], monsters: [], maxDepth: 0 };
+    if ($('modal-progress').classList.contains('open')) this.renderProgress();
+  }
+
+  openProgress() {
+    this.renderProgress();
+    $('modal-progress').classList.add('open');
+  }
+
+  renderProgress() {
+    const disc = this.discovered || { crops: [], minerals: [], monsters: [], maxDepth: 0 };
+    const CROP_IDS = ['turnip', 'potato', 'carrot', 'strawberry', 'tomato', 'corn', 'pepper', 'onion', 'cabbage', 'beet'];
+    const MINERAL_IDS = ['iron', 'copper', 'gold'];
+    const MONSTER_IDS = ['slime_small', 'slime_medium', 'slime_big', 'skeleton'];
+    const section = (titleKey, ids, have, iconFor, nameFor) => {
+      const items = ids.map((id) => {
+        const found = have.includes(id);
+        const icon = found ? iconFor(id) : '/assets/cursor.png';
+        const name = found ? nameFor(id) : '?';
+        return `<div class="prog-item${found ? '' : ' locked'}" title="${found ? escapeHtml(name) : '???'}">
+          <img src="${icon}" alt="">
+        </div>`;
+      }).join('');
+      return `<div class="prog-section"><h3>${t(titleKey)} <span class="count">${have.length}/${ids.length}</span></h3>
+        <div class="prog-grid">${items}</div></div>`;
+    };
+    const depthPct = Math.min(100, Math.round((disc.maxDepth / 100) * 100));
+    const html = [
+      section('progress.crops', CROP_IDS, disc.crops, (id) => `/assets/icons/item_${id}.png`, (id) => t(`crop.${id}`)),
+      section('progress.minerals', MINERAL_IDS, disc.minerals, (id) => `/assets/icons/item_${id}.png`, (id) => t(`item.${id}`)),
+      section('progress.monsters', MONSTER_IDS, disc.monsters, (id) => `/assets/icons/mob_${id}.png`, (id) => t(`mob.${id}`)),
+      `<div class="prog-section"><h3>${t('progress.mine')} <span class="count">${disc.maxDepth}/100</span></h3>
+        <div class="prog-depth">${t('progress.mineHint')}
+          <div class="gl-bar"><div class="gl-fill" style="width:${depthPct}%"></div></div>
+        </div></div>`,
+    ].join('');
+    $('progress-content').innerHTML = html;
   }
 
   anyModalOpen() {
