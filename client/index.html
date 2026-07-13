@@ -102,6 +102,8 @@
   }
   #hud-energy { bottom: 12px; right: 12px; width: 26px; height: 140px; background: var(--panel); border: 3px solid var(--border); border-radius: 6px; overflow: hidden; display: flex; align-items: flex-end; }
   #hud-energy .fill { width: 100%; background: linear-gradient(#ffe36e, #e8a33d); }
+  #hud-health { bottom: 12px; right: 46px; width: 26px; height: 140px; background: var(--panel); border: 3px solid var(--border); border-radius: 6px; overflow: hidden; display: flex; align-items: flex-end; }
+  #hud-health .fill { width: 100%; background: linear-gradient(#ff6e6e, #c43d3d); }
   #hotbar { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
   .slot {
     width: 48px; height: 48px; background: var(--panel); border: 3px solid var(--border); border-radius: 8px;
@@ -227,6 +229,7 @@
   </div>
   <div class="hud" id="hud-clock"></div>
   <div class="hud" id="hud-energy"><div class="fill" style="height:100%"></div></div>
+  <div class="hud" id="hud-health"><div class="fill" style="height:100%"></div></div>
   <div class="hud" id="hotbar"></div>
   <div class="hud" id="chat">
     <div id="chat-log"></div>

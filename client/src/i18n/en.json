@@ -56,6 +56,10 @@
   "craft.hint": "Turn materials into useful items.",
   "craft.make": "Craft",
   "craft.fenceDesc": "fence — select it in the hotbar and click on grass to place it",
+  "craft.swordDesc": "melee weapon, short range, high damage",
+  "craft.spearDesc": "melee weapon, medium range",
+  "craft.bowDesc": "ranged weapon, long range",
+  "craft.shieldDesc": "reduces damage taken from monsters while equipped",
 
   "quest.title": "📋 Notice Board",
   "quest.hint": "Deliver what's requested for coins — a new request appears afterward.",
@@ -106,6 +110,8 @@
   "err.network": "Connection error. Try again.",
   "err.reconnecting": "Connection dropped — reconnecting...",
   "err.reconnected": "Reconnected! ✅",
+  "err.out_of_range": "Too far — get closer to the monster.",
+  "err.fainted": "You fainted in the mine and were carried home...",
 
   "item.wood": "Wood",
   "item.stone": "Stone",
@@ -134,6 +140,10 @@
   "tool.can": "Watering Can",
   "tool.axe": "Axe",
   "tool.pickaxe": "Pickaxe",
+  "tool.sword": "Sword",
+  "tool.spear": "Spear",
+  "tool.bow": "Bow and Arrow",
+  "tool.shield": "Shield",
 
   "hud.day": "Day {day} — {season}",
   "interact.sleep": "Sleep (E)",
@@ -143,5 +153,6 @@
   "interact.board": "View request (E)",
   "interact.enter": "Enter (E)",
   "interact.up": "Go up (E)",
-  "interact.down": "Go down (E)"
+  "interact.down": "Go down (E)",
+  "interact.shortcut": "Escape to exit (E)"
 }

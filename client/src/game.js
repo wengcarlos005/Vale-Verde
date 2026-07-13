@@ -1,7 +1,7 @@
 // Cena principal do jogo (Phaser 3) — renderização do mundo, movimento com
 // predição local, jogadores remotos, ações de fazenda e interações.
 import { connect } from './net.js';
-import { Hud, TOOLS, itemName } from './hud.js';
+import { Hud, TOOLS, WEAPONS, itemName } from './hud.js';
 import { t } from './i18n.js';
 
 const CROP_ORDER = ['turnip', 'potato', 'carrot', 'strawberry', 'tomato', 'corn', 'pepper', 'onion', 'cabbage', 'beet'];
@@ -88,7 +88,7 @@ export function startGame(farm) {
 // (troca de tela), senão os handlers da cena antiga ficariam duplicados no socket.
 const GAME_EVENTS = [
   'playerJoined', 'playerLeft', 'playerMoved', 'playerAppearance', 'chat', 'tile', 'object',
-  'egg', 'forage', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
+  'egg', 'forage', 'monster', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
   'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect', 'connect',
 ];
 
@@ -153,6 +153,13 @@ class GameScene extends Phaser.Scene {
     L.image('forage_copper', '/assets/forage_copper.png');
     L.image('forage_gold', '/assets/forage_gold.png');
     for (const tl of ['hoe', 'can', 'axe', 'pickaxe']) L.image(`tool_${tl}`, `/assets/icons/tool_${tl}.png`);
+    for (const wp of ['sword', 'spear', 'bow', 'shield']) L.image(`tool_${wp}`, `/assets/icons/tool_${wp}.png`);
+    // Monstros da mina: 4 frames idle cada, mesmo padrão dos outros bichos (chicken etc).
+    L.spritesheet('mob_slime_small', '/assets/mob_slime_small.png', { frameWidth: 16, frameHeight: 16 });
+    L.spritesheet('mob_slime_medium', '/assets/mob_slime_medium.png', { frameWidth: 32, frameHeight: 32 });
+    L.spritesheet('mob_slime_big', '/assets/mob_slime_big.png', { frameWidth: 64, frameHeight: 64 });
+    L.spritesheet('mob_skeleton', '/assets/mob_skeleton.png', { frameWidth: 32, frameHeight: 32 });
+    L.image('arrow', '/assets/icons/tool_bow.png'); // reaproveita o ícone do arco como "flecha" voando (simplificação do tiro à distância)
     L.spritesheet('chicken', '/assets/chicken.png', { frameWidth: 32, frameHeight: 32 });
     L.spritesheet('rock', '/assets/rock.png', { frameWidth: 32, frameHeight: 32 });
     L.image('bin', '/assets/bin.png');
@@ -203,6 +210,7 @@ class GameScene extends Phaser.Scene {
     this.interactables = d.world.interactables || [];
     this.crops = d.crops;
     this.recipes = d.recipes || {};
+    this.weapons = d.weapons || {};
     this.tilesState = d.state.tiles;
     this.objectsState = d.state.objects;
     this.buildingsState = d.state.buildings || [];
@@ -222,6 +230,7 @@ class GameScene extends Phaser.Scene {
       deliverQuest: () => this.socket.emit('deliverQuest'),
       sell: (item, qty) => this.socket.emit('sell', { item, qty }),
       cancelSleep: () => { this.socket.emit('sleep', false); this.hud.hideSleep(); },
+      equip: (item) => this.socket.emit('equip', { item }),
     });
     this.hud.crops = this.crops;
     this.hud.buildingDefs = this.buildingDefs;
@@ -239,6 +248,9 @@ class GameScene extends Phaser.Scene {
     this.anims.create({ key: 'bob_idle', frames: this.anims.generateFrameNumbers('bob', { start: 0, end: 5 }), frameRate: 5, repeat: -1 });
     this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly', { start: 0, end: 3 }), frameRate: 10, repeat: -1 });
     this.anims.create({ key: 'boat_bob', frames: this.anims.generateFrameNumbers('boat', { start: 0, end: 3 }), frameRate: 3, repeat: -1 });
+    for (const key of ['mob_slime_small', 'mob_slime_medium', 'mob_slime_big', 'mob_skeleton']) {
+      this.anims.create({ key: `${key}_idle`, frames: this.anims.generateFrameNumbers(key, { start: 0, end: 3 }), frameRate: 4, repeat: -1 });
+    }
     // galinha: linha 0 idle (0-1), linha 1 anda p/ baixo (8-13), linha 2 lado (16-21), linha 3 cima (24-29)
     this.anims.create({ key: 'chicken_idle', frames: this.anims.generateFrameNumbers('chicken', { start: 0, end: 1 }), frameRate: 3, repeat: -1 });
     this.anims.create({ key: 'chicken_down', frames: this.anims.generateFrameNumbers('chicken', { start: 8, end: 13 }), frameRate: 8, repeat: -1 });
@@ -269,6 +281,11 @@ class GameScene extends Phaser.Scene {
     this.forageState = d.state.forage || {};
     this.forageSprites = new Map();
     for (const [key, f] of Object.entries(this.forageState)) this.setForage(key, f);
+
+    // monstros da mina (parados — vida/hp resolvidos no servidor)
+    this.monstersState = d.state.monsters || {};
+    this.monsterSprites = new Map();
+    for (const [id, m] of Object.entries(this.monstersState)) this.spawnMonster(id, m);
 
     this.waterSprites.forEach(s => s.play({ key: 'water_flow', startFrame: Phaser.Math.Between(0, 7) }));
     if (this.bob) this.bob.play('bob_idle');
@@ -572,6 +589,11 @@ class GameScene extends Phaser.Scene {
       if (e.kind === 'ladder_up' || e.kind === 'ladder_down') {
         const [x, y] = e.at;
         this.add.image(x * T, y * T, 'ladder').setOrigin(0).setDepth(y * T + 2);
+      } else if (e.kind === 'shortcut') {
+        // Saída de atalho (a cada 5 níveis) — mesma escada, tingida de dourado pra se
+        // diferenciar visualmente da escada normal (ladder_up/down).
+        const [x, y] = e.at;
+        this.add.image(x * T, y * T, 'ladder').setOrigin(0).setDepth(y * T + 2).setTint(0xffd76a);
       }
     }
     // Bob atrás do balcão da loja (interior 'shop')
@@ -777,6 +799,38 @@ class GameScene extends Phaser.Scene {
     for (const key of [...this.forageSprites.keys()]) if (!forage[key]) this.setForage(key, null);
     for (const key of Object.keys(forage)) if (!this.forageSprites.has(key)) this.setForage(key, forage[key]);
     this.forageState = forage;
+  }
+
+  // ---------------- monstros da mina ----------------
+  spawnMonster(id, m) {
+    this.despawnMonster(id);
+    const x = m.x * T + T / 2, by = m.y * T + T;
+    const sprite = this.add.sprite(x, by, `mob_${m.type}`, 0).setOrigin(0.5, 1).setDepth(by).play(`mob_${m.type}_idle`);
+    // barrinha de vida fina acima do monstro — só aparece quando ele já levou dano (cheia
+    // = não polui a tela de bichos ilesos, igual ao resto do jogo não mostra HUD à toa).
+    const barW = 16;
+    const barBg = this.add.rectangle(x, by - sprite.displayHeight - 6, barW, 3, 0x1a1a1a).setDepth(by + 1).setVisible(m.hp < m.maxHp);
+    const barFg = this.add.rectangle(x - barW / 2, by - sprite.displayHeight - 6, barW * (m.hp / m.maxHp), 3, 0xd8483c)
+      .setOrigin(0, 0.5).setDepth(by + 2).setVisible(m.hp < m.maxHp);
+    this.monsterSprites.set(id, { sprite, barBg, barFg, barW });
+  }
+
+  despawnMonster(id) {
+    const e = this.monsterSprites.get(id);
+    if (!e) return;
+    e.sprite.destroy(); e.barBg.destroy(); e.barFg.destroy();
+    this.monsterSprites.delete(id);
+  }
+
+  updateMonster(id, m) {
+    if (!m) { this.despawnMonster(id); return; }
+    const e = this.monsterSprites.get(id);
+    if (!e) { this.spawnMonster(id, m); return; }
+    const hurt = m.hp < m.maxHp;
+    e.barBg.setVisible(hurt); e.barFg.setVisible(hurt);
+    e.barFg.width = e.barW * Math.max(0, m.hp / m.maxHp);
+    e.sprite.setTintFill(0xffffff);
+    this.time.delayedCall(80, () => e.sprite.clearTint());
   }
 
   setAnimals(animals) {
@@ -1045,7 +1099,49 @@ class GameScene extends Phaser.Scene {
     this.buildMode.valid = ok; this.buildMode.bx = bx; this.buildMode.by = by;
   }
 
+  // Acha um monstro no tile exato (mira direta, tecla de ação) ou dentro do retângulo do
+  // sprite (clique do mouse, igual à retargeting de árvore/pedra).
+  findMonsterAt(tx, ty) {
+    for (const [id, m] of Object.entries(this.monstersState)) if (m.x === tx && m.y === ty) return id;
+    return null;
+  }
+  findMonsterNear(worldX, worldY) {
+    for (const [id, e] of this.monsterSprites) if (e.sprite.getBounds().contains(worldX, worldY)) return id;
+    return null;
+  }
+
+  // Atira uma "flecha" simples (tween reto até o alvo) — simplificação do tiro à
+  // distância: sem física de projétil de verdade, o servidor já resolve o acerto na hora.
+  showArrow(me, mon) {
+    const from = { x: me.container.x, y: me.container.y - 10 };
+    const to = { x: mon.x * T + T / 2, y: mon.y * T + T / 2 };
+    const arrow = this.add.image(from.x, from.y, 'arrow').setScale(0.4).setDepth(99998)
+      .setRotation(Math.atan2(to.y - from.y, to.x - from.x));
+    this.tweens.add({ targets: arrow, x: to.x, y: to.y, duration: 160, onComplete: () => arrow.destroy() });
+  }
+
   doAction(tx, ty, worldX, worldY) {
+    // Ataque em monstro tem prioridade se uma arma ofensiva tá selecionada (escudo não
+    // ataca, só bloqueia — resolvido passivamente no servidor via 'equip').
+    const selected = this.hud.selectedItem();
+    if (selected && WEAPONS.includes(selected.id) && selected.id !== 'shield') {
+      let monsterId = this.findMonsterAt(tx, ty);
+      if (!monsterId && worldX !== undefined) monsterId = this.findMonsterNear(worldX, worldY);
+      if (monsterId) {
+        const mon = this.monstersState[monsterId];
+        const me = this.players.get(this.me);
+        const px = me.container.x / T, py = me.container.y / T;
+        const range = (this.weapons[selected.id] && this.weapons[selected.id].range) || 1.5;
+        if (Math.hypot(px - mon.x, py - mon.y) > range + 0.6) { this.hud.toast(t('err.out_of_range')); return; }
+        const dxT = mon.x - Math.floor(me.container.x / T), dyT = mon.y - Math.floor(me.container.y / T);
+        me.dir = Math.abs(dxT) >= Math.abs(dyT) ? (dxT >= 0 ? 'right' : 'left') : (dyT > 0 ? 'down' : 'up');
+        this.socket.emit('action', { type: 'attack', monsterId, weapon: selected.id });
+        this.playAnim(me, 'act', me.dir, true);
+        this.showToolSwing(me, selected.id);
+        if (selected.id === 'bow') this.showArrow(me, mon);
+        return;
+      }
+    }
     let key = `${tx},${ty}`;
     let obj = this.objectsState[key];
     // Prioridade: se o tile clicado já é acionável por si só (objeto, solo arado,
@@ -1201,6 +1297,7 @@ class GameScene extends Phaser.Scene {
     });
     s.on('egg', ({ key, egg }) => { if (egg) this.eggsState[key] = egg; else delete this.eggsState[key]; this.setEgg(key, egg); });
     s.on('forage', ({ key, item }) => { if (item) this.forageState[key] = item; else delete this.forageState[key]; this.setForage(key, item); });
+    s.on('monster', ({ id, monster }) => { if (monster) this.monstersState[id] = monster; else delete this.monstersState[id]; this.updateMonster(id, monster); });
     s.on('animals', ({ animals }) => this.setAnimals(animals));
     s.on('building', ({ building }) => {
       this.buildingsState.push(building);
@@ -1331,7 +1428,7 @@ class GameScene extends Phaser.Scene {
     let hint = null;
     for (const e of this.entrances) {
       if (Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1) {
-        hint = t(`interact.${e.kind === 'ladder_up' ? 'up' : e.kind === 'ladder_down' ? 'down' : 'enter'}`);
+        hint = t(`interact.${e.kind === 'ladder_up' ? 'up' : e.kind === 'ladder_down' ? 'down' : e.kind === 'shortcut' ? 'shortcut' : 'enter'}`);
         break;
       }
     }

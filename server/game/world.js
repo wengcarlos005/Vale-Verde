@@ -341,12 +341,11 @@ function generatePedreira(seed) {
 }
 
 // ---------------- telas separadas (mina) ----------------
-// A mina é uma sequência de telas próprias (mine:1, mine:2, ...), entradas pelo prédio
-// mine_entrance no overworld. Cada nível é uma sala de caverna com escada pra descer
-// (minério mais raro/valioso quanto mais fundo) e escada/saída pra subir.
-const MINE_W = 34, MINE_H = 22;
-const MINE_UP = [3, 3];                       // escada de subir/sair (canto sup-esq)
-const MINE_DOWN = [MINE_W - 4, MINE_H - 4];   // escada de descer (canto inf-dir)
+// A mina é uma sequência de telas próprias (mine:1, mine:2, ...), entradas pela Pedreira.
+// Cada nível é uma sala de caverna com escada pra descer (minério mais raro/valioso
+// quanto mais fundo) e escada/saída pra subir. Os primeiros 10 níveis têm FORMA e
+// TAMANHO próprios (não um retângulo só escalando) — níveis 11+ caem num gerador
+// genérico (retângulo crescendo devagar), documentado como próximo passo.
 // Tile do mapa 'pedreira' onde o jogador reaparece ao sair da mina (logo abaixo do prédio).
 const MINE_ENTRANCE_RETURN = [24, 17];
 
@@ -361,35 +360,197 @@ function mineOreCounts(depth) {
   ];
 }
 
+// Helpers de forma: `isFloor(x,y)` decide o que é chão andável (o resto vira parede de
+// caverna). rectFloor/unionFloor compõem formas complexas a partir de retângulos.
+function rectFloor(x0, y0, x1, y1) { return (x, y) => x >= x0 && x < x1 && y >= y0 && y < y1; }
+function unionFloor(...fns) { return (x, y) => fns.some(f => f(x, y)); }
+
+// Config dos primeiros 10 níveis: forma+tamanho variam de verdade (não só escala). Todo
+// nível múltiplo de 5 (`shortcut: true`) ganha uma saída extra direto pra Pedreira.
+const MINE_LEVELS = [
+  { w: 20, h: 14, shape: 'rect' },
+  { w: 24, h: 16, shape: 'rect' },
+  { w: 28, h: 20, shape: 'l' },
+  { w: 26, h: 18, shape: 'pillars' },
+  { w: 30, h: 20, shape: 'lake', shortcut: true },
+  { w: 42, h: 12, shape: 'corridor' },
+  { w: 26, h: 26, shape: 'cross' },
+  { w: 32, h: 22, shape: 'pillars_dense' },
+  { w: 36, h: 28, shape: 'rect' },
+  { w: 34, h: 24, shape: 'lake_pillars', shortcut: true },
+];
+
+function mineLevelConfig(depth) {
+  if (depth >= 1 && depth <= MINE_LEVELS.length) return MINE_LEVELS[depth - 1];
+  // Níveis 11+: retângulo genérico crescendo bem devagar — dar forma própria a esses
+  // também é o próximo passo natural (documentado no plano), não bloqueia os 10 primeiros.
+  return { w: Math.min(60, 24 + depth), h: Math.min(40, 16 + Math.floor(depth / 2)), shape: 'rect' };
+}
+
+function mineIsFloor(shape, w, h) {
+  const inset = rectFloor(1, 1, w - 1, h - 1);
+  if (shape === 'l') {
+    return unionFloor(rectFloor(1, 1, Math.floor(w * 0.55), h - 1), rectFloor(1, 1, w - 1, Math.floor(h * 0.5)));
+  }
+  if (shape === 'pillars' || shape === 'pillars_dense' || shape === 'lake_pillars') {
+    const step = shape === 'pillars_dense' ? 5 : shape === 'lake_pillars' ? 9 : 7;
+    return (x, y) => {
+      if (!inset(x, y)) return false;
+      if (x > 3 && y > 3 && x < w - 4 && y < h - 4 && (x - 4) % step === 0 && (y - 4) % step === 0) return false;
+      return true;
+    };
+  }
+  if (shape === 'corridor') {
+    const bandH = Math.max(4, Math.floor(h / 3));
+    return unionFloor(
+      rectFloor(1, 1, Math.floor(w * 0.5), bandH),
+      rectFloor(Math.floor(w * 0.4), 1, Math.floor(w * 0.6), h - 1),
+      rectFloor(Math.floor(w * 0.5), h - 1 - bandH, w - 1, h - 1),
+    );
+  }
+  if (shape === 'cross') {
+    const cx = Math.floor(w / 2), cy = Math.floor(h / 2), arm = Math.floor(Math.min(w, h) * 0.28);
+    return unionFloor(rectFloor(1, cy - arm, w - 1, cy + arm), rectFloor(cx - arm, 1, cx + arm, h - 1));
+  }
+  return inset; // 'rect', 'lake' (o lago em si é recortado à parte, ver makeMineLevel)
+}
+
+// Procura o primeiro tile andável varrendo diagonalmente a partir de (x0,y0) — usado pra
+// achar onde encaixar as escadas em formas irregulares (o canto literal pode ser parede).
+function findFloorNear(isFloor, w, h, x0, y0, dx, dy) {
+  for (let r = 0; r < Math.max(w, h); r++) {
+    const x = x0 + dx * r, y = y0 + dy * r;
+    if (x >= 1 && x < w - 1 && y >= 1 && y < h - 1 && isFloor(x, y)) return [x, y];
+  }
+  return [Math.floor(w / 2), Math.floor(h / 2)];
+}
+
+// Posição das escadas de um nível, sem gerar o nível inteiro (barato — não depende de
+// `rnd`/minério/monstro, só da forma) — usado pra sincronizar o ladder_down de um nível
+// com o ladder_up do próximo sem precisar construir os dois de verdade.
+function mineLadderPositions(depth) {
+  const cfg = mineLevelConfig(depth);
+  const isFloor = mineIsFloor(cfg.shape, cfg.w, cfg.h);
+  return {
+    up: findFloorNear(isFloor, cfg.w, cfg.h, 2, 2, 1, 1),
+    down: findFloorNear(isFloor, cfg.w, cfg.h, cfg.w - 3, cfg.h - 3, -1, -1),
+  };
+}
+
+// Monstros por profundidade: slime pequeno → médio → grande → esqueleto, ficando mais
+// numerosos e resistentes quanto mais fundo (dificuldade crescente por nível).
+const MONSTER_TIERS = [
+  { maxDepth: 2, type: 'slime_small', hp: 2 },
+  { maxDepth: 5, type: 'slime_medium', hp: 4 },
+  { maxDepth: 8, type: 'slime_big', hp: 7 },
+  { maxDepth: Infinity, type: 'skeleton', hp: 11 },
+];
+function monsterTierFor(depth) { return MONSTER_TIERS.find(t => depth <= t.maxDepth); }
+
 function makeMineLevel(seed, depth) {
   const rnd = mulberry32((seed ^ 0x51ede1 ^ Math.imul(depth, 2654435761)) >>> 0);
-  const w = MINE_W, h = MINE_H;
+  const cfg = mineLevelConfig(depth);
+  const w = cfg.w, h = cfg.h;
+  const isFloor = mineIsFloor(cfg.shape, w, h);
   const ground = [];
-  for (let y = 0; y < h; y++) ground.push(new Array(w).fill(3)); // tudo chão de caverna
+  for (let y = 0; y < h; y++) ground.push(new Array(w).fill(3)); // chão de caverna em toda a caixa
   const objects = {};
-  // parede de caverna fechando a sala (colisão)
-  for (let x = 0; x < w; x++) { objects[`${x},0`] = { type: 'cavewall' }; objects[`${x},${h - 1}`] = { type: 'cavewall' }; }
-  for (let y = 0; y < h; y++) { objects[`0,${y}`] = { type: 'cavewall' }; objects[`${w - 1},${y}`] = { type: 'cavewall' }; }
-  // minério espalhado (evita as escadas e mantém 1 tile de folga entre depósitos)
-  const scatterState = { objects };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!isFloor(x, y)) objects[`${x},${y}`] = { type: 'cavewall' };
+  }
+
+  const up = findFloorNear(isFloor, w, h, 2, 2, 1, 1);
+  const down = findFloorNear(isFloor, w, h, w - 3, h - 3, -1, -1);
+  // Saída de atalho (a cada 5 níveis): escapa direto pra Pedreira sem subir nível por
+  // nível. Busca a partir da borda esquerda na meia-altura (não do centro geométrico —
+  // é onde o lago abaixo vai ser esculpido; começar a busca ali fazia a saída cair bem
+  // no meio do lago, virando uma ilhota inacessível cercada de água).
+  let shortcutAt = null;
+  if (cfg.shortcut) {
+    shortcutAt = findFloorNear(isFloor, w, h, 2, Math.floor(h / 2), 1, 0);
+  }
+
+  // Lago (formas 'lake'/'lake_pillars'): reaproveita o ground do lago normal (1) — já
+  // bloqueia e já tem autotile de borda no cliente, sem precisar de tileset novo. Poupa
+  // um raio ao redor das escadas E do atalho pra nenhum dos três afogar.
+  if (cfg.shape === 'lake' || cfg.shape === 'lake_pillars') {
+    const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
+    const rx = Math.max(3, Math.floor(w * 0.16)), ry = Math.max(3, Math.floor(h * 0.14));
+    const nearReserved = (x, y) => [up, down, shortcutAt].some(pt => pt && Math.abs(x - pt[0]) <= 2 && Math.abs(y - pt[1]) <= 2);
+    for (let y = cy - ry; y <= cy + ry; y++) for (let x = cx - rx; x <= cx + rx; x++) {
+      if (!isFloor(x, y)) continue;
+      if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 > 1) continue;
+      if (nearReserved(x, y)) continue;
+      ground[y][x] = 1;
+      delete objects[`${x},${y}`];
+    }
+  }
+
   const reserved = (x, y) =>
-    (Math.abs(x - MINE_UP[0]) <= 1 && Math.abs(y - MINE_UP[1]) <= 1) ||
-    (Math.abs(x - MINE_DOWN[0]) <= 1 && Math.abs(y - MINE_DOWN[1]) <= 1);
-  for (const [mineral, count] of mineOreCounts(depth)) {
-    let placed = 0, tries = 0;
-    while (placed < count && tries++ < 900) {
-      const x = 2 + Math.floor(rnd() * (w - 4)), y = 2 + Math.floor(rnd() * (h - 4));
-      if (objects[`${x},${y}`] || reserved(x, y) || hasNearbyContent(scatterState, x, y)) continue;
+    (Math.abs(x - up[0]) <= 1 && Math.abs(y - up[1]) <= 1) ||
+    (Math.abs(x - down[0]) <= 1 && Math.abs(y - down[1]) <= 1) ||
+    (shortcutAt && Math.abs(x - shortcutAt[0]) <= 1 && Math.abs(y - shortcutAt[1]) <= 1);
+  const floorAndFree = (x, y) => isFloor(x, y) && ground[y][x] === 3 && !objects[`${x},${y}`] && !reserved(x, y);
+
+  // Lista embaralhada de tiles de chão candidatos — formas finas (corredor em S, cruz)
+  // têm baixa taxa de acerto pra amostragem aleatória "às cegas" (a maior parte da caixa
+  // delimitadora é parede), então em vez de sortear (x,y) e tentar de novo até um limite
+  // de tentativas (podia falhar silenciosamente e sobrar sem monstro nenhum num corredor
+  // estreito), embaralha TODOS os tiles de chão uma vez e percorre em ordem — garante
+  // preencher até o alvo sempre que sobrar espaço de verdade.
+  const candidates = [];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (isFloor(x, y)) candidates.push([x, y]);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
+  const scatterState = { objects };
+
+  // Monstros PRIMEIRO (antes do minério): a contagem de monstro é sempre pequena (2-9),
+  // então reservar o espaço deles antes evita que o minério — cuja contagem-alvo escala
+  // só com a profundidade, não com a forma do nível — encha um corredor fino inteiro e
+  // não sobre vaga nenhuma pra monstro (bug real visto num formato de corredor estreito).
+  const tier = monsterTierFor(depth);
+  const monsterCount = Math.min(9, 2 + Math.floor(depth / 2));
+  const monsters = {};
+  let placedM = 0, nextId = 1;
+  for (const [x, y] of candidates) {
+    if (placedM >= monsterCount) break;
+    if (!floorAndFree(x, y) || hasNearbyContent(scatterState, x, y)) continue;
+    const id = `m${nextId++}`;
+    const hp = tier.hp + Math.floor(rnd() * 3) + Math.floor(depth / 3);
+    monsters[id] = { id, type: tier.type, x, y, hp, maxHp: hp };
+    placedM++;
+  }
+
+  // Minério: usa o que sobrou dos candidatos, com um teto (~45% do chão) pra sempre
+  // sobrar espaço de passagem mesmo num formato bem apertado.
+  const oreCounts = mineOreCounts(depth);
+  const oreCap = Math.max(6, Math.floor(candidates.length * 0.45));
+  let oreBudgetLeft = oreCap;
+  for (const [mineral, count] of oreCounts) {
+    let placed = 0;
+    const target = Math.min(count, oreBudgetLeft);
+    for (const [x, y] of candidates) {
+      if (placed >= target) break;
+      if (!floorAndFree(x, y) || hasNearbyContent(scatterState, x, y)) continue;
       objects[`${x},${y}`] = { type: 'ore', mineral, hp: 3 };
       placed++;
     }
+    oreBudgetLeft -= placed;
   }
+
+  const nextUp = mineLadderPositions(depth + 1).up;
+  const prevDown = depth > 1 ? mineLadderPositions(depth - 1).down : null;
   const entrances = [
-    { at: MINE_UP, kind: 'ladder_up', to: depth === 1 ? 'pedreira' : `mine:${depth - 1}`,
-      toSpawn: depth === 1 ? MINE_ENTRANCE_RETURN : [MINE_DOWN[0], MINE_DOWN[1] - 1] },
-    { at: MINE_DOWN, kind: 'ladder_down', to: `mine:${depth + 1}`, toSpawn: [MINE_UP[0], MINE_UP[1] + 1] },
+    { at: up, kind: 'ladder_up', to: depth === 1 ? 'pedreira' : `mine:${depth - 1}`,
+      toSpawn: depth === 1 ? MINE_ENTRANCE_RETURN : [prevDown[0], prevDown[1] - 1] },
+    { at: down, kind: 'ladder_down', to: `mine:${depth + 1}`, toSpawn: [nextUp[0], nextUp[1] + 1] },
   ];
-  return { ground, objects, entrances, w, h, spawn: [MINE_UP[0], MINE_UP[1] + 1] };
+  if (shortcutAt) entrances.push({ at: shortcutAt, kind: 'shortcut', to: 'pedreira', toSpawn: MINE_ENTRANCE_RETURN });
+
+  return { ground, objects, monsters, entrances, w, h, spawn: [up[0], up[1] + 1] };
 }
 
 // ---------------- interiores (casa, loja) ----------------
@@ -456,7 +617,8 @@ function worldEntrances(mapKey) {
   const list = BUILDINGS[mapKey] || [];
   const mine = list.find(b => b.type === 'mine_entrance');
   if (mine) {
-    ents.push({ at: [mine.x + Math.floor(mine.w / 2), mine.y + mine.h - 1], kind: 'mine', to: 'mine:1', toSpawn: [MINE_UP[0], MINE_UP[1] + 1] });
+    const mineUp = mineLadderPositions(1).up;
+    ents.push({ at: [mine.x + Math.floor(mine.w / 2), mine.y + mine.h - 1], kind: 'mine', to: 'mine:1', toSpawn: [mineUp[0], mineUp[1] + 1] });
   }
   for (const type of ['house', 'shop']) {
     const b = list.find(bl => bl.type === type);
@@ -510,7 +672,7 @@ function scatterForage(state, n, rnd = Math.random) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, TILE, PV_W, PV_H, SOUTH_W, SOUTH_H, PED_W, PED_H, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA, MINE_W, MINE_H,
+  WIDTH, HEIGHT, TILE, PV_W, PV_H, SOUTH_W, SOUTH_H, PED_W, PED_H, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA,
   generateOverworld, generatePortoVale, generateSouth, generatePedreira, initialFarmState,
   inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
   inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, makeInterior, worldEntrances, depthOf,

@@ -319,4 +319,37 @@ d.rectangle([0, 0, 15, 15], outline=(255, 235, 120, 230), width=1)
 d.rectangle([1, 1, 14, 14], outline=(120, 90, 20, 160), width=1)
 cur.save(o("cursor.png"))
 
+# ---------- combate (Fase D: mina com monstros) ----------
+# Ícones de arma pro hotbar (mesmo padrão dos ícones de ferramenta: 16x16 do pack,
+# redimensionado 2x). Espada e escudo já existem prontos no MESMO sheet das ferramentas
+# (Tool_Icons_Outline); arco vem de outro sheet dedicado; lança não tem sprite pronto no
+# pack — sintetizada abaixo (cabo diagonal + ponta), no mesmo estilo/paleta dos outros.
+tools_sheet2 = load(p("Icons", "Outline", "Tool_Icons_Outline.png"))
+WEAPON_IDX = {"sword": 4, "shield": 8}
+for name, idx in WEAPON_IDX.items():
+    tools_sheet2.crop((idx * 16, 0, idx * 16 + 16, 16)).resize((32, 32), Image.NEAREST).save(o(f"icons/tool_{name}.png"))
+load(p("Other", "Bow_Stages.png")).crop((16, 0, 32, 16)).resize((32, 32), Image.NEAREST).save(o("icons/tool_bow.png"))
+
+spear = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+ds = ImageDraw.Draw(spear)
+ds.line([(2, 14), (10, 6)], fill=(58, 32, 18, 255), width=3)     # cabo (contorno escuro)
+ds.line([(2, 14), (10, 6)], fill=(122, 74, 43, 255), width=1)    # cabo (realce)
+ds.polygon([(9, 7), (12, 4), (15, 1), (12, 5), (9, 8)], fill=(72, 84, 94, 255), outline=(30, 36, 42, 255))
+ds.polygon([(10, 6), (13, 3), (11, 5)], fill=(184, 197, 207, 255))  # brilho da lâmina
+spear.resize((32, 32), Image.NEAREST).save(o("icons/tool_spear.png"))
+
+# Monstros: slime pequeno/médio/grande (16/32/64px por frame, 8 col x 4 linhas — linha 0
+# = idle) + esqueleto (32px, 6 col — linha 0 = idle). Uma cor por porte (não precisa das
+# 5 variantes de cor do pack).
+MONSTER_SPRITES = {
+    "slime_small": ("Slime/Slime_Small/Slime_Small_Green.png", 16),
+    "slime_medium": ("Slime/Slime_Medium/Slime_Medium_Blue.png", 32),
+    "slime_big": ("Slime/Slime_Big/Slime_Big_Red.png", 64),
+}
+for name, (rel, fsize) in MONSTER_SPRITES.items():
+    im = load(p("Enemies", rel))
+    im.crop((0, 0, fsize * 4, fsize)).save(o(f"mob_{name}.png"))  # 4 frames idle
+skel = load(p("Enemies", "Skeleton", "Skeleton.png"))
+skel.crop((0, 0, 32 * 4, 32)).save(o("mob_skeleton.png"))  # 4 frames idle (linha 0)
+
 print("assets ok:", len([f for r, _, fs in os.walk(OUT) for f in fs]))

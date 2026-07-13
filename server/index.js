@@ -95,6 +95,7 @@ io.on('connection', (socket) => {
   socket.on('buyAnimal', () => room.onBuyAnimal(socket));
   socket.on('build', d => room.onBuild(socket, d));
   socket.on('craft', d => room.onCraft(socket, d));
+  socket.on('equip', d => room.onEquip(socket, d));
   socket.on('deliverQuest', () => room.onDeliverQuest(socket));
   socket.on('enterMap', () => room.enterMap(socket));
   socket.on('eat', d => room.onEat(socket, d));

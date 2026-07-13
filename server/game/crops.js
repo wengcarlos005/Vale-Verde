@@ -51,6 +51,24 @@ const FORAGE = {
 // Receitas da bancada de fabricação: custo em recursos → item dado ao inventário.
 const RECIPES = {
   fence: { cost: { wood: 4 }, give: 'fence', qty: 1 },
+  // Armas de combate (mina) — craftadas igual a qualquer receita, viram selecionáveis
+  // no hotbar como uma ferramenta comum (ver WEAPONS no client).
+  sword: { cost: { wood: 2, iron: 2 }, give: 'sword', qty: 1 },
+  spear: { cost: { wood: 3, iron: 1 }, give: 'spear', qty: 1 },
+  bow: { cost: { wood: 3, stone: 1 }, give: 'bow', qty: 1 },
+  shield: { cost: { wood: 2, stone: 3 }, give: 'shield', qty: 1 },
+};
+
+// Estatísticas de combate por arma. `range` em tiles (folga extra aplicada no cliente e
+// no servidor pra compensar posição contínua vs. tile). Espada = curto alcance, dano
+// alto; lança = alcance médio; arco = alcance longo, tiro à distância simplificado (sem
+// física de projétil — o servidor resolve o acerto na hora, ver rooms.js). Escudo não
+// ataca (damage 0) — `block` é a fração de dano por contato reduzida quando equipado.
+const WEAPON_STATS = {
+  sword: { range: 1.3, damage: 3 },
+  spear: { range: 2.3, damage: 2 },
+  bow: { range: 4.5, damage: 2 },
+  shield: { range: 0, damage: 0, block: 0.5 },
 };
 
 // Pedidos do quadro de recados: só itens sempre obteníveis (não presos à estação).
@@ -77,4 +95,4 @@ function stageOf(crop, daysGrown) {
   return Math.min(3, Math.floor((daysGrown / def.days) * 4));
 }
 
-module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
+module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };

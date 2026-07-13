@@ -56,6 +56,10 @@
   "craft.hint": "Transforme materiais em itens úteis.",
   "craft.make": "Fabricar",
   "craft.fenceDesc": "cerca — selecione na barra e clique na grama para plantar",
+  "craft.swordDesc": "arma corpo a corpo, alcance curto, dano alto",
+  "craft.spearDesc": "arma corpo a corpo, alcance médio",
+  "craft.bowDesc": "arma à distância, alcance longo",
+  "craft.shieldDesc": "reduz o dano recebido de monstros ao ser equipado",
 
   "quest.title": "📋 Quadro de Recados",
   "quest.hint": "Entregue o que está pedindo e ganhe moedas — um novo pedido aparece depois.",
@@ -106,6 +110,8 @@
   "err.network": "Erro de conexão. Tente de novo.",
   "err.reconnecting": "Conexão caiu — reconectando...",
   "err.reconnected": "Reconectado! ✅",
+  "err.out_of_range": "Longe demais — chegue mais perto do monstro.",
+  "err.fainted": "Você desmaiou na mina e foi levado pra casa...",
 
   "item.wood": "Madeira",
   "item.stone": "Pedra",
@@ -134,6 +140,10 @@
   "tool.can": "Regador",
   "tool.axe": "Machado",
   "tool.pickaxe": "Picareta",
+  "tool.sword": "Espada",
+  "tool.spear": "Lança",
+  "tool.bow": "Arco e Flecha",
+  "tool.shield": "Escudo",
 
   "hud.day": "Dia {day} — {season}",
   "interact.sleep": "Dormir (E)",
@@ -143,5 +153,6 @@
   "interact.board": "Ver pedido (E)",
   "interact.enter": "Entrar (E)",
   "interact.up": "Subir (E)",
-  "interact.down": "Descer (E)"
+  "interact.down": "Descer (E)",
+  "interact.shortcut": "Escapar pra saída (E)"
 }

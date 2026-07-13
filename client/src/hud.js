@@ -4,9 +4,13 @@ import { escapeHtml } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 export const TOOLS = ['hoe', 'can', 'axe', 'pickaxe'];
+// Armas de combate (mina): fabricadas na bancada, não são ferramentas de base como as
+// acima (só aparecem no hotbar depois de craftadas — hotbarItems() já cobre isso, é só
+// mais um id de inventário comum), mas usam o MESMO padrão de ícone/nome que as tools.
+export const WEAPONS = ['sword', 'spear', 'bow', 'shield'];
 
 export function itemIcon(id) {
-  if (TOOLS.includes(id)) return `/assets/icons/tool_${id}.png`;
+  if (TOOLS.includes(id) || WEAPONS.includes(id)) return `/assets/icons/tool_${id}.png`;
   if (id.startsWith('seed_')) return `/assets/icons/${id}.png`;
   return `/assets/icons/item_${id}.png`;
 }
@@ -17,7 +21,7 @@ export const FOODS = new Set(['berry', 'mushroom']);
 const CRAFTED_ITEMS = new Set(['fence']);
 
 export function itemName(id) {
-  if (TOOLS.includes(id)) return t(`tool.${id}`);
+  if (TOOLS.includes(id) || WEAPONS.includes(id)) return t(`tool.${id}`);
   if (id.startsWith('seed_')) return t('seed.suffix', { crop: t(`crop.${id.slice(5)}`) });
   if (id in RESOURCE_PRICE || CRAFTED_ITEMS.has(id)) return t(`item.${id}`);
   return t(`crop.${id}`);
@@ -26,7 +30,7 @@ export function itemName(id) {
 export class Hud {
   constructor(game) {
     this.game = game;       // callbacks: sendChat, buy, sell, cancelSleep
-    this.inv = { items: {}, energy: 100, can: { level: 20, max: 20 } };
+    this.inv = { items: {}, energy: 100, can: { level: 20, max: 20 }, health: 100, maxHealth: 100 };
     this.slots = [];        // [{id, qty}]
     this.selected = 0;
     this.crops = {};
@@ -72,6 +76,7 @@ export class Hud {
     this.inv = inv;
     this.renderHotbar();
     this.renderEnergy();
+    this.renderHealth();
     if ($('modal-bin').classList.contains('open')) this.renderBin();
     if ($('modal-craft').classList.contains('open')) this.renderCraft();
     if ($('modal-quest').classList.contains('open')) this.renderQuest();
@@ -114,6 +119,12 @@ export class Hud {
     $('hud-energy').querySelector('.fill').style.height = pct + '%';
   }
 
+  renderHealth() {
+    const max = this.inv.maxHealth || 100;
+    const pct = Math.max(0, Math.min(100, (this.inv.health / max) * 100));
+    $('hud-health').querySelector('.fill').style.height = pct + '%';
+  }
+
   hotbarItems() {
     const ids = Object.keys(this.inv.items);
     const seeds = ids.filter(i => i.startsWith('seed_')).sort();
@@ -150,6 +161,11 @@ export class Hud {
     if (i < 0 || i >= this.slots.length) return;
     this.selected = i;
     this.renderHotbar();
+    // Servidor precisa saber a arma equipada pra resolver o bloqueio do escudo no
+    // combate por contato (tick de combate roda no servidor, não vê seleção de hotbar).
+    const item = this.selectedItem();
+    if (item && WEAPONS.includes(item.id)) this.game.equip(item.id);
+    else this.game.equip(null);
   }
 
   selectedItem() { return this.slots[this.selected] || null; }
@@ -248,13 +264,15 @@ export class Hud {
   renderCraft() {
     const box = $('craft-items');
     box.innerHTML = '';
-    const have = { wood: this.inv.items.wood || 0, stone: this.inv.items.stone || 0 };
+    const COST_ICON = { wood: '🪵', stone: '🪨', iron: '⛓️', copper: '🟠', gold: '🟡' };
     for (const [id, def] of Object.entries(this.recipes || {})) {
       const cost = def.cost || {};
       const parts = [];
-      if (cost.wood) parts.push(`🪵${cost.wood}`);
-      if (cost.stone) parts.push(`🪨${cost.stone}`);
-      const enough = (cost.wood || 0) <= have.wood && (cost.stone || 0) <= have.stone;
+      let enough = true;
+      for (const [item, qty] of Object.entries(cost)) {
+        parts.push(`${COST_ICON[item] || ''}${qty}`);
+        if (qty > (this.inv.items[item] || 0)) enough = false;
+      }
       const div = document.createElement('div');
       div.className = 'shop-item';
       div.style.opacity = enough ? '1' : '.55';

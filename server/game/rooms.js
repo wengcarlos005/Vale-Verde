@@ -1,6 +1,6 @@
 // Salas de jogo: uma por fazenda, servidor autoritativo.
 const { stmts } = require('../db');
-const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
+const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
 const W = require('./world');
 
 const DAY_START = 6 * 60;          // 6:00
@@ -9,6 +9,7 @@ const REAL_DAY_MS = 15 * 60 * 1000; // 1 dia de jogo = 15 min reais
 const MIN_PER_TICK = (DAY_END - DAY_START) / (REAL_DAY_MS / 1000); // por segundo
 
 const ENERGY_MAX = 100;
+const HEALTH_MAX = 100;
 const COST = { till: 2, water: 1, plant: 1, harvest: 1, chop: 2, mine: 2, place: 1 };
 
 function newInventory() {
@@ -16,6 +17,8 @@ function newInventory() {
     items: { seed_turnip: 5 },
     energy: ENERGY_MAX,
     can: { level: 20, max: 20 },
+    health: HEALTH_MAX, maxHealth: HEALTH_MAX,
+    equipped: null, // arma selecionada no hotbar (só o client sabe a seleção — sincronizado via 'equip' pro servidor resolver o bloqueio do escudo)
   };
 }
 
@@ -100,7 +103,7 @@ class Room {
       return {
         key: 'overworld',
         ground: this.state.ground, objects: this.state.objects, tiles: this.state.tiles,
-        forage: this.state.forage, eggs: this.state.eggs,
+        forage: this.state.forage, eggs: this.state.eggs, monsters: {},
         w: W.WIDTH, h: W.HEIGHT, entrances: this._owEntrances, spawn: W.SPAWN,
       };
     }
@@ -111,7 +114,7 @@ class Room {
         const gen = W.makeInterior(mapKey);
         this._maps[mapKey] = {
           key: mapKey,
-          ground: gen.ground, objects: gen.objects, tiles: {}, forage: {}, eggs: {},
+          ground: gen.ground, objects: gen.objects, tiles: {}, forage: {}, eggs: {}, monsters: {},
           w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn, interactables: gen.interactables,
         };
       } else {
@@ -123,8 +126,9 @@ class Room {
         else if (mapKey === 'pedreira') { gen = W.generatePedreira(this.state.seed); entrances = W.worldEntrances('pedreira'); }
         else { gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey)); entrances = gen.entrances; }
         if (!this.state.maps) this.state.maps = {};
-        if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {} };
+        if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {}, monsters: gen.monsters || {} };
         const saved = this.state.maps[mapKey];
+        if (saved.monsters == null) saved.monsters = gen.monsters || {}; // migração: mapa salvo antes do sistema de combate
         // Migração: terreno "ao ar livre" é sempre regerado do código atual (não salvo),
         // então se a geração mudar (praia cresceu, estrada mudou de forma...) um objeto
         // ESPALHADO (árvore/pedra/arbusto/toco) pode ficar preso em cima de areia/água/
@@ -143,6 +147,7 @@ class Room {
         this._maps[mapKey] = {
           key: mapKey,
           ground: gen.ground, objects: saved.objects, tiles: saved.tiles, forage: saved.forage, eggs: saved.eggs,
+          monsters: saved.monsters,
           w: gen.w, h: gen.h, entrances, spawn: gen.spawn,
         };
       }
@@ -169,10 +174,11 @@ class Room {
         day: s.day, season: s.season, year: s.year, time: s.time, money: s.money,
         tiles: m.tiles, objects: m.objects, bin: s.bin,
         animals: isOw ? s.animals : [], eggs: m.eggs, buildings: isOw ? s.buildings : [],
-        forage: m.forage, quest: s.quest,
+        forage: m.forage, quest: s.quest, monsters: m.monsters || {},
       },
       crops: CROPS,
       recipes: RECIPES,
+      weapons: WEAPON_STATS,
       you: { userId: p.userId, inv: this.inv(p.userId) },
       players: this.playersOnMap(m.key).map(q => this.publicPlayer(q)),
     };
@@ -185,7 +191,10 @@ class Room {
 
   inv(userId) {
     if (!this.state.inventories[userId]) this.state.inventories[userId] = newInventory();
-    return this.state.inventories[userId];
+    const inv = this.state.inventories[userId];
+    // migração: inventários salvos antes do sistema de combate não tinham vida/equip.
+    if (inv.health == null) { inv.health = HEALTH_MAX; inv.maxHealth = HEALTH_MAX; inv.equipped = null; }
+    return inv;
   }
 
   addItem(inv, id, qty) { inv.items[id] = (inv.items[id] || 0) + qty; if (inv.items[id] <= 0) delete inv.items[id]; }
@@ -280,6 +289,7 @@ class Room {
     if (this.players.size === 0) return;
     this.state.time += MIN_PER_TICK;
     if (this.state.time >= DAY_END) { this.advanceDay(true); return; }
+    this.tickCombat();
     // broadcast do relógio a cada ~10s
     if (Date.now() - this.lastTimeBroadcast > 10000) {
       this.lastTimeBroadcast = Date.now();
@@ -418,6 +428,10 @@ class Room {
     const p = this.players.get(socket.id);
     if (!p || !data) return;
     const { type } = data;
+    // Ataque em monstro: não tem x/y (o alvo é o monstro, não um tile) e o alcance varia
+    // por arma (arco chega bem mais longe que os 2 tiles do `near()` genérico), então
+    // resolve antes/fora da validação de tile normal.
+    if (type === 'attack') { this.onAttack(socket, data); return; }
     const x = Math.floor(data.x), y = Math.floor(data.y);
     const m = this.mapOf(p.map);
     if (x < 0 || y < 0 || x >= m.w || y >= m.h || !this.near(p, x, y)) return;
@@ -609,7 +623,8 @@ class Room {
     socket.emit('inv', inv);
   }
 
-  // Fabricar na bancada: consome materiais e dá o item pronto (por ora só cerca).
+  // Fabricar na bancada: consome materiais e dá o item pronto (cerca, e agora também as
+  // armas de combate — sword/spear/bow/shield custam madeira+ferro/pedra).
   onCraft(socket, data) {
     const p = this.players.get(socket.id);
     if (!p || !data || p.map !== 'overworld') return;
@@ -620,14 +635,106 @@ class Room {
     }
     const inv = this.inv(p.userId);
     const cost = def.cost || {};
-    if ((cost.wood || 0) > (inv.items.wood || 0) || (cost.stone || 0) > (inv.items.stone || 0)) {
-      socket.emit('err', { code: 'no_materials' }); return;
+    for (const [item, qty] of Object.entries(cost)) {
+      if (qty > (inv.items[item] || 0)) { socket.emit('err', { code: 'no_materials' }); return; }
     }
-    if (cost.wood) this.addItem(inv, 'wood', -cost.wood);
-    if (cost.stone) this.addItem(inv, 'stone', -cost.stone);
+    for (const [item, qty] of Object.entries(cost)) this.addItem(inv, item, -qty);
     this.addItem(inv, def.give, def.qty || 1);
     this.dirty = true;
     socket.emit('inv', inv);
+  }
+
+  // Arma equipada no hotbar — o client só manda isso quando seleciona/desseleciona uma
+  // arma (não a cada frame). Guardado no inventário pra o tick de combate saber resolver
+  // o bloqueio do escudo (o servidor não vê a seleção do hotbar de outra forma).
+  onEquip(socket, data) {
+    const p = this.players.get(socket.id);
+    if (!p) return;
+    const inv = this.inv(p.userId);
+    const item = data && data.item ? String(data.item) : null;
+    inv.equipped = (item && WEAPON_STATS[item]) ? item : null;
+  }
+
+  // Atacar um monstro: sem x/y (o alvo é o monstro, não um tile) — alcance vem da arma
+  // (WEAPON_STATS), bem maior que o `near()` genérico das ações de fazenda (arco chega
+  // a ~4.5 tiles). Escudo não ataca (damage 0, filtrado antes de chegar aqui).
+  onAttack(socket, data) {
+    const p = this.players.get(socket.id);
+    if (!p) return;
+    const weaponId = String((data && data.weapon) || '');
+    const stats = WEAPON_STATS[weaponId];
+    if (!stats || !stats.damage) return;
+    const inv = this.inv(p.userId);
+    if (!inv.items[weaponId]) return; // precisa ter a arma de verdade no inventário
+    const m = this.mapOf(p.map);
+    const monsterId = String((data && data.monsterId) || '');
+    const mon = m.monsters && m.monsters[monsterId];
+    if (!mon) return;
+    const px = p.x / W.TILE, py = p.y / W.TILE;
+    if (Math.hypot(px - mon.x, py - mon.y) > stats.range + 0.6) return;
+    mon.hp -= stats.damage;
+    this.dirty = true;
+    if (mon.hp <= 0) {
+      delete m.monsters[monsterId];
+      const depth = W.depthOf(p.map);
+      const reward = 5 + depth * 2 + Math.floor(Math.random() * 5);
+      this.state.money += reward;
+      this.emitMap(p.map, 'monster', { id: monsterId, monster: null });
+      this.emit('money', { money: this.state.money });
+    } else {
+      this.emitMap(p.map, 'monster', { id: monsterId, monster: mon });
+    }
+  }
+
+  // Dano por contato: monstros são PARADOS (sem perseguição, decisão explícita pra
+  // reduzir risco/escopo) — se o jogador fica perto (mesmo tile ou vizinho), leva dano a
+  // cada tick (1s) enquanto continuar ali. Escudo equipado reduz o dano recebido.
+  tickCombat() {
+    for (const p of this.players.values()) {
+      if (!p.map || !p.map.startsWith('mine:')) continue;
+      const m = this._maps && this._maps[p.map];
+      if (!m || !m.monsters) continue;
+      const monsters = Object.values(m.monsters);
+      if (!monsters.length) continue;
+      const px = p.x / W.TILE, py = p.y / W.TILE;
+      if (!monsters.some((mon) => Math.hypot(px - mon.x, py - mon.y) < 0.9)) continue;
+      const inv = this.inv(p.userId);
+      const depth = W.depthOf(p.map);
+      let dmg = 3 + Math.floor(depth / 3);
+      if (inv.equipped === 'shield' && inv.items.shield) dmg = Math.max(1, Math.ceil(dmg * (1 - WEAPON_STATS.shield.block)));
+      inv.health = Math.max(0, inv.health - dmg);
+      this.dirty = true;
+      if (inv.health <= 0) { this.faintInMine(p, inv); continue; }
+      this.io.to(p.socketId).emit('inv', inv);
+    }
+  }
+
+  // Vida chega a 0 na mina: "desmaia" e é levado de volta pra casa (overworld), recupera
+  // metade da vida, perde um pouco de dinheiro — mesmo espírito do desmaio por exaustão
+  // que já existe pra energia. Reaproveita o mesmo formato de payload do enterMap/joined
+  // pra reconstruir a cena do jogador do zero na tela nova.
+  faintInMine(p, inv) {
+    inv.health = Math.ceil(inv.maxHealth * 0.5);
+    const penalty = Math.min(this.state.money, 20 + W.depthOf(p.map) * 3);
+    this.state.money -= penalty;
+    this.emit('money', { money: this.state.money });
+    const oldMap = p.map;
+    const houseB = W.BUILDINGS.overworld.find((b) => b.type === 'house');
+    const spawn = houseB ? [houseB.door[0], houseB.door[1] + 1] : [W.SPAWN.x, W.SPAWN.y];
+    this.emitMap(oldMap, 'playerLeft', { userId: p.userId });
+    p.map = 'overworld';
+    p.x = spawn[0] * W.TILE; p.y = spawn[1] * W.TILE;
+    p.dir = 'down'; p.anim = 'idle'; p.sleeping = false;
+    const socket = this.io.sockets && this.io.sockets.sockets && this.io.sockets.sockets.get(p.socketId);
+    if (socket) {
+      socket.leave(this.mapChannel(oldMap));
+      socket.join(this.mapChannel('overworld'));
+      socket.emit('joined', this.mapPayload(p));
+      socket.emit('err', { code: 'fainted' });
+      socket.to(this.mapChannel('overworld')).emit('playerJoined', this.publicPlayer(p));
+    }
+    this.checkAllSleeping();
+    this.dirty = true;
   }
 
   // Entregar o pedido do quadro de recados: dá a recompensa e sorteia o próximo.
