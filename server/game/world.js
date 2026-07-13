@@ -1,13 +1,18 @@
-// Geração do mapa: fazenda (x0-59) + vila (x60-91) + Porto Vale, cidade grande e
-// litorânea (x92-149) na faixa norte; mina (x25-64,y60-77) e praia (x100-149,y60-79)
-// na faixa sul, ligadas por uma bifurcação que sai perto da praça da vila. Tudo num
-// único mundo/room (sem troca de mapa) — mesmo padrão da fazenda→vila, só cresce
-// WIDTH/HEIGHT e pinta a região nova.
+// Geração do mapa: o overworld (fazenda + vila) é o mapa "núcleo" que carrega no login
+// — precisa ser leve. Porto Vale e o ramal sul (mina/praia) são TELAS SEPARADAS,
+// carregadas sob demanda (mesmo sistema de mapOf/enterMap já usado pra mina/interiores),
+// cada uma com coordenada própria (0,0). Isso troca "um mapa gigante contínuo" por
+// "vários mapas pequenos", que é o que resolve o carregamento pesado.
 // Ground: 0 grama, 1 água (lago), 2 estrada, 3 chão de caverna, 4 areia, 5 água (oceano),
-// 6 piso de madeira (interior). Objetos (árvore/pedra/minério/parede/móveis) vivem no estado.
-const WIDTH = 150;
-const HEIGHT = 80;
+// 6 piso de madeira (interior), 7 pedra (encosta da mina). Objetos (árvore/pedra/minério/
+// parede/móveis) vivem no estado.
+const WIDTH = 92;
+const HEIGHT = 50;
 const TILE = 16;
+
+// Dimensões dos mapas "ao ar livre" separados (Porto Vale e o ramal sul).
+const PV_W = 60, PV_H = 36;
+const SOUTH_W = 100, SOUTH_H = 42;
 
 function mulberry32(seed) {
   return function () {
@@ -18,27 +23,34 @@ function mulberry32(seed) {
   };
 }
 
-// Prédios FIXOS iniciais: rect = base com colisão (sprite desenhado acima, alinhado
-// pela borda inferior). door = tile de interação (na borda de baixo). padBottom =
-// linhas de tile transparentes na base do PNG (medido por pixel) que NÃO devem
-// bloquear — sem isso a colisão "sobra" além da parede visível e o jogador é
-// barrado num tile de grama normal na frente da porta.
-const BUILDINGS = [
-  { type: 'house', x: 6,  y: 6, w: 9, h: 4, padBottom: 1, door: [10, 9] },  // dormir (sprite 144x128)
-  { type: 'shop',  x: 22, y: 6, w: 6, h: 4, padBottom: 1, door: [24, 9] },  // loja do Bob (sprite 96x128)
-  { type: 'bin',   x: 16, y: 10, w: 1, h: 1, door: [16, 10] }, // caixa de venda
-  { type: 'well',  x: 13, y: 13, w: 2, h: 1 },                 // decorativo (sprite 32x48)
-  { type: 'bench', x: 10, y: 12, w: 1, h: 1 },                 // bancada de fabricação, perto da casa
-  // vila (praça a leste, ligada por estrada) — quadro de recados morou pra lá.
-  { type: 'store', x: 79, y: 6, w: 9, h: 4, padBottom: 1 },    // casa de pedra, decorativa por ora (sprite 144x128)
-  { type: 'board', x: 83, y: 15, w: 1, h: 1 },                 // quadro de recados, na praça da vila
-  // Porto Vale (cidade grande e litorânea, fim da estrada leste) — decorativas por ora.
-  { type: 'city_hall',  x: 108, y: 5, w: 9, h: 4, padBottom: 1 }, // calcário bege (sprite 144x128)
-  { type: 'city_house', x: 122, y: 6, w: 7, h: 3, padBottom: 1 }, // madeira verde (sprite 112x96)
-  // Mina — arco esculpido na rocha, puramente decorativo (h todo virou padBottom: o
-  // jogador tem que poder atravessar o vão andando, não é uma porta/parede de verdade).
-  { type: 'mine_entrance', x: 44, y: 57, w: 3, h: 3, padBottom: 3 },
-];
+// Prédios FIXOS iniciais, por MAPA (cada mapa tem coordenada própria 0,0). rect = base
+// com colisão (sprite desenhado acima, alinhado pela borda inferior). door = tile de
+// interação (na borda de baixo). padBottom = linhas de tile transparentes na base do
+// PNG (medido por pixel) que NÃO devem bloquear — sem isso a colisão "sobra" além da
+// parede visível e o jogador é barrado num tile de grama normal na frente da porta.
+const BUILDINGS = {
+  overworld: [
+    { type: 'house', x: 6,  y: 6, w: 9, h: 4, padBottom: 1, door: [10, 9] },  // dormir (sprite 144x128)
+    { type: 'shop',  x: 22, y: 6, w: 6, h: 4, padBottom: 1, door: [24, 9] },  // loja do Bob (sprite 96x128)
+    { type: 'bin',   x: 16, y: 10, w: 1, h: 1, door: [16, 10] }, // caixa de venda
+    { type: 'well',  x: 13, y: 13, w: 2, h: 1 },                 // decorativo (sprite 32x48)
+    { type: 'bench', x: 10, y: 12, w: 1, h: 1 },                 // bancada de fabricação, perto da casa
+    // vila (praça a leste, ligada por estrada) — quadro de recados morou pra lá.
+    { type: 'store', x: 79, y: 6, w: 9, h: 4, padBottom: 1 },    // casa de pedra, decorativa por ora (sprite 144x128)
+    { type: 'board', x: 83, y: 15, w: 1, h: 1 },                 // quadro de recados, na praça da vila
+  ],
+  // Porto Vale — cidade grande e litorânea, tela própria (entrada na borda oeste).
+  portovale: [
+    { type: 'city_hall',  x: 22, y: 7, w: 9, h: 4, padBottom: 1 }, // calcário bege (sprite 144x128)
+    { type: 'city_house', x: 36, y: 8, w: 7, h: 3, padBottom: 1 }, // madeira verde (sprite 112x96)
+  ],
+  // Ramal sul (mina + praia) — tela própria (entrada na borda norte).
+  south: [
+    // Mina — arco esculpido na rocha, puramente decorativo (h todo virou padBottom: o
+    // jogador tem que poder atravessar o vão andando, não é uma porta/parede de verdade).
+    { type: 'mine_entrance', x: 23, y: 18, w: 3, h: 3, padBottom: 3 },
+  ],
+};
 
 // Prédios CONSTRUÍVEIS pelo jogador (comprados com materiais e posicionados).
 // h = tiles da base com colisão; vis = quantos tiles o sprite sobe acima da base.
@@ -62,8 +74,8 @@ function buildingVisual(b, x, y) {
   const vis = b.vis != null ? b.vis : 4;
   return x >= b.x - 1 && x < b.x + b.w + 1 && y >= b.y - vis && y < b.y + b.h + 1;
 }
-function inBuildingVisual(x, y) {
-  return BUILDINGS.some(b => buildingVisual(b, x, y));
+function inBuildingVisual(mapKey, x, y) {
+  return (BUILDINGS[mapKey] || []).some(b => buildingVisual(b, x, y));
 }
 
 // Prédios construídos pelo jogador (ex.: galinheiro) + o quintal dos galinheiros —
@@ -96,8 +108,9 @@ function hasNearbyContent(state, x, y, radius = 1) {
 // Verifica se um novo prédio (bx,by,w,h, com overhang visual `vis` acima da base)
 // cabe sem encostar em nenhum prédio existente — evita telhados/paredes se
 // sobrepondo visualmente quando o jogador constrói perto demais de outro prédio.
+// Só o overworld tem construção do jogador (coop), então só olha os prédios fixos de lá.
 function buildingSpotFree(state, bx, by, w, h, vis, sidePad = 1) {
-  const rects = [...BUILDINGS, ...state.buildings];
+  const rects = [...BUILDINGS.overworld, ...state.buildings];
   const nx0 = bx - sidePad, nx1 = bx + w + sidePad;
   const ny0 = by - vis, ny1 = by + h + sidePad;
   for (const ob of rects) {
@@ -112,133 +125,166 @@ function buildingSpotFree(state, bx, by, w, h, vis, sidePad = 1) {
 const POND = { x: 44, y: 36, w: 12, h: 10 };
 const FARMLAND = { x: 8, y: 15, w: 29, h: 17 }; // área mantida livre de objetos
 const SPAWN = { x: 18, y: 12 };
-// Praia: areia com franja pro mar aberto (não um lago redondo) no canto sul-leste.
-const PRAIA = { x: 100, y: 60, w: 50, h: 20 };
+// Praia (mapa 'south'): areia com franja pro mar aberto no canto sul-leste do mapa.
+const PRAIA = { x: 55, y: 18, w: 42, h: 22 };
 
-function generateWorld(seed) {
-  const rnd = mulberry32(seed);
-  const ground = [];
-  for (let y = 0; y < HEIGHT; y++) {
-    const row = new Array(WIDTH).fill(0);
-    ground.push(row);
-  }
-  // Lago
-  for (let y = POND.y; y < POND.y + POND.h; y++)
-    for (let x = POND.x; x < POND.x + POND.w; x++) ground[y][x] = 1;
-  // Áreas de terra orgânicas (código 2): praça entre casa e loja, entrada norte,
-  // caminho até o campo e até o lago, clareiras.
-  const dirt = (x, y) => {
-    if (x >= 1 && y >= 0 && x < WIDTH - 1 && y < HEIGHT - 1 && ground[y][x] === 0) ground[y][x] = 2;
-  };
+// ---------------- helpers de terreno compartilhados pelos 3 geradores ----------------
+function terrainTools(ground, w, h) {
+  const dirt = (x, y) => { if (x >= 1 && y >= 0 && x < w - 1 && y < h - 1 && ground[y][x] === 0) ground[y][x] = 2; };
   const ellipse = (cx, cy, rx, ry) => {
     for (let y = Math.floor(cy - ry); y <= cy + ry; y++)
       for (let x = Math.floor(cx - rx); x <= cx + rx; x++)
         if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) dirt(x, y);
   };
-  const rect = (x0, y0, x1, y1) => {
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) dirt(x, y);
-  };
-  // Praça central de terra ligando casa (esq), loja (dir) e caixa de venda.
-  ellipse(11, 11.5, 7, 2.4);            // praça da casa
-  ellipse(25, 11.5, 6, 2.4);            // praça da loja
-  rect(11, 10, 25, 13);                 // liga as duas praças (bloco central)
-  // Entrada norte: reta e larga (3 tiles) descendo do topo à praça.
-  rect(30, 0, 32, 13);
-  // Portão do campo: trecho curto de terra da praça até a cerca (abre o gap na cerca).
-  rect(17, 12, 19, 14);
-  // Caminho ao galinheiro/lago: sai da praça leste, contorna o campo pelo leste.
-  rect(25, 12, 143, 13);                // faixa leste na altura da praça — segue até Porto Vale
-  rect(38, 13, 39, 23);                 // desce pela lateral leste do campo até o quintal
-  dirt(9, 10); dirt(10, 10); dirt(24, 10); dirt(25, 10); // frente das portas
-  // Vila: praça a leste da estrada, longe da fazenda — rota de transição entre as duas.
-  ellipse(80, 12.5, 9, 3);
-  // Porto Vale: cidade grande e litorânea, no fim da estrada leste.
-  ellipse(120, 12.5, 15, 4);
-  // Bifurcação sul: sai perto do cruzamento da vila, desce e se divide em dois ramais
-  // (mina a oeste, praia a leste) — a "rota de transição" pras áreas novas do sul.
-  rect(64, 13, 66, 52);                 // corredor vertical principal
-  rect(43, 50, 118, 52);                // faixa leste-oeste ligando os dois ramais
-  rect(43, 52, 47, 60);                 // ramal oeste até a entrada da mina
-  rect(114, 52, 118, 66);               // ramal leste até a praia
-
-  // A mina agora é uma TELA separada (ver makeMineLevel) entrada pelo prédio
-  // mine_entrance — não tem mais caverna aberta no overworld.
-
-  // Praia: areia + oceano aberto na diagonal sul-leste, chegando à borda do mapa (o mar
-  // "continua" além da tela). Costa ORGÂNICA (ondulada por seno determinístico), não um
-  // degrau reto — o autotile de foam do cliente faz a transição suave areia↔água. Uma
-  // margem de areia garantida perto da grama impede oceano colado na grama (sempre tem
-  // areia no meio, pro cliente desenhar a transição grama→areia suave).
-  for (let y = PRAIA.y; y < PRAIA.y + PRAIA.h; y++) {
-    for (let x = PRAIA.x; x < PRAIA.x + PRAIA.w; x++) {
-      if (ground[y][x] !== 0) continue;
-      const dx = x - PRAIA.x, dy = y - PRAIA.y;
-      const coast = dx * 0.7 + dy * 1.15;
-      const wave = 2.3 * Math.sin(x * 0.55) + 1.7 * Math.sin(y * 0.8 + x * 0.15);
-      ground[y][x] = (coast > 6 && coast + wave > PRAIA.w * 0.42) ? 5 : 4;
+  const rect = (x0, y0, x1, y1) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) dirt(x, y); };
+  return { dirt, ellipse, rect };
+}
+// `terrainTools().dirt` propositalmente NÃO pinta a borda direita/inferior/esquerda
+// (só a de cima, pro caso original da entrada norte) — pra abrir uma travessia de
+// borda pra outro mapa (leste/sul/oeste), pinta direto ignorando essa margem, senão a
+// borderTrees() abaixo tampa o vão com uma árvore.
+function openEdge(ground, w, h, x0, y0, x1, y1) {
+  for (let y = Math.max(0, y0); y <= Math.min(h - 1, y1); y++) {
+    for (let x = Math.max(0, x0); x <= Math.min(w - 1, x1); x++) {
+      if (ground[y][x] === 0) ground[y][x] = 2;
     }
   }
-  // Buffer de areia: onde a onda empurrou oceano encostado na grama, volta pra areia —
-  // grama nunca toca oceano direto (sempre tem areia no meio pro cliente fazer a
-  // transição grama→areia→foam suave).
-  for (let y = PRAIA.y; y < PRAIA.y + PRAIA.h; y++) {
-    for (let x = PRAIA.x; x < PRAIA.x + PRAIA.w; x++) {
-      if (ground[y][x] !== 5) continue;
-      const g0 = (xx, yy) => yy >= 0 && yy < HEIGHT && xx >= 0 && xx < WIDTH && ground[yy][xx] === 0;
-      if (g0(x, y - 1) || g0(x, y + 1) || g0(x - 1, y) || g0(x + 1, y)) ground[y][x] = 4;
-    }
-  }
-
-  const inRect = (r, x, y, pad = 0) =>
-    x >= r.x - pad && x < r.x + r.w + pad && y >= r.y - pad && y < r.y + r.h + pad;
-  const blocked = (x, y) =>
-    ground[y][x] !== 0 ||
-    inBuildingVisual(x, y) ||
-    inRect(FARMLAND, x, y, 2) ||
-    (Math.abs(x - SPAWN.x) < 3 && Math.abs(y - SPAWN.y) < 3);
-
-  const objects = {};
-  const treeVariant = () => (rnd() < 0.7 ? 'oak' : 'birch');
-  // Cerca de árvores na borda
-  for (let x = 0; x < WIDTH; x++) for (const y of [0, HEIGHT - 1]) {
+}
+function borderTrees(ground, objects, w, h, treeVariant) {
+  for (let x = 0; x < w; x++) for (const y of [0, h - 1]) {
     if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'tree', variant: treeVariant(), hp: 5 };
   }
-  for (let y = 0; y < HEIGHT; y++) for (const x of [0, WIDTH - 1]) {
+  for (let y = 0; y < h; y++) for (const x of [0, w - 1]) {
     if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'tree', variant: treeVariant(), hp: 5 };
   }
-  // Cerca de madeira ao redor do campo (o caminho de terra vira o portão)
-  for (let x = FARMLAND.x - 1; x <= FARMLAND.x + FARMLAND.w; x++) {
-    for (const y of [FARMLAND.y - 1, FARMLAND.y + FARMLAND.h]) {
-      if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'fence' };
-    }
-  }
-  for (let y = FARMLAND.y - 1; y <= FARMLAND.y + FARMLAND.h; y++) {
-    for (const x of [FARMLAND.x - 1, FARMLAND.x + FARMLAND.w]) {
-      if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'fence' };
-    }
-  }
-  // Árvores, pedras, arbustos e tocos espalhados (contagens escaladas p/ o mapa
-  // maior desde que a vila foi adicionada a leste, senão fica ralo demais lá).
-  const SCATTER = [
-    [92, () => ({ type: 'tree', variant: treeVariant(), hp: 5 })],
-    [46, () => ({ type: 'rock', hp: 3 })],
-    [40, () => ({ type: 'bush', hp: 2 })],
-    [12, () => ({ type: 'stump', hp: 2 })],
-  ];
-  const scatterState = { objects }; // wrapper só pra reusar hasNearbyContent
-  for (const [count, make] of SCATTER) {
+}
+function scatterOnMap(mapKey, ground, objects, w, h, rnd, list, blockedExtra) {
+  const scatterState = { objects };
+  const blocked = (x, y) => ground[y][x] !== 0 || inBuildingVisual(mapKey, x, y) || (blockedExtra && blockedExtra(x, y));
+  for (const [count, make] of list) {
     let placed = 0, tries = 0;
     while (placed < count && tries++ < 2000) {
-      const x = 1 + Math.floor(rnd() * (WIDTH - 2));
-      const y = 1 + Math.floor(rnd() * (HEIGHT - 2));
+      const x = 1 + Math.floor(rnd() * (w - 2));
+      const y = 1 + Math.floor(rnd() * (h - 2));
       if (blocked(x, y) || hasNearbyContent(scatterState, x, y)) continue;
       objects[`${x},${y}`] = make();
       placed++;
     }
   }
+}
+function paintBeach(ground, w, h, praia) {
+  for (let y = praia.y; y < praia.y + praia.h; y++) {
+    for (let x = praia.x; x < praia.x + praia.w; x++) {
+      if (ground[y][x] !== 0) continue;
+      const dx = x - praia.x, dy = y - praia.y;
+      const coast = dx * 0.7 + dy * 1.15;
+      const wave = 2.3 * Math.sin(x * 0.55) + 1.7 * Math.sin(y * 0.8 + x * 0.15);
+      ground[y][x] = (coast > 6 && coast + wave > praia.w * 0.42) ? 5 : 4;
+    }
+  }
+  // Buffer de areia: grama nunca toca oceano direto (sempre tem areia no meio pro
+  // cliente fazer a transição grama→areia→foam suave).
+  for (let y = praia.y; y < praia.y + praia.h; y++) {
+    for (let x = praia.x; x < praia.x + praia.w; x++) {
+      if (ground[y][x] !== 5) continue;
+      const g0 = (xx, yy) => yy >= 0 && yy < h && xx >= 0 && xx < w && ground[yy][xx] === 0;
+      if (g0(x, y - 1) || g0(x, y + 1) || g0(x - 1, y) || g0(x + 1, y)) ground[y][x] = 4;
+    }
+  }
+}
 
-  // (Minério agora só existe nas telas de mina — ver makeMineLevel.)
+// ---------------- overworld (fazenda + vila) — mapa núcleo, carrega no login ----------------
+function generateOverworld(seed) {
+  const rnd = mulberry32(seed);
+  const ground = [];
+  for (let y = 0; y < HEIGHT; y++) ground.push(new Array(WIDTH).fill(0));
+  for (let y = POND.y; y < POND.y + POND.h; y++)
+    for (let x = POND.x; x < POND.x + POND.w; x++) ground[y][x] = 1;
+  const { dirt, ellipse, rect } = terrainTools(ground, WIDTH, HEIGHT);
+  // Praça central de terra ligando casa (esq), loja (dir) e caixa de venda.
+  ellipse(11, 11.5, 7, 2.4);            // praça da casa
+  ellipse(25, 11.5, 6, 2.4);            // praça da loja
+  rect(11, 10, 25, 13);                 // liga as duas praças (bloco central)
+  rect(30, 0, 32, 13);                  // entrada norte
+  rect(17, 12, 19, 14);                 // portão do campo
+  rect(25, 12, 91, 13);                 // faixa leste — passa pela praça da vila e sai na borda leste (Porto Vale)
+  rect(38, 13, 39, 23);                 // desce pela lateral leste do campo até o quintal
+  dirt(9, 10); dirt(10, 10); dirt(24, 10); dirt(25, 10); // frente das portas
+  ellipse(80, 12.5, 9, 3);              // praça da vila
+  rect(64, 13, 66, HEIGHT - 2);         // ramal sul — sai perto do cruzamento da vila até perto da borda
+  // travessias de borda pros mapas vizinhos (dirt() não pinta a borda direita/inferior de propósito)
+  openEdge(ground, WIDTH, HEIGHT, 89, 12, WIDTH - 1, 13);         // leste → Porto Vale
+  openEdge(ground, WIDTH, HEIGHT, 64, HEIGHT - 2, 66, HEIGHT - 1); // sul → south
+
+  const inRect = (r, x, y, pad = 0) =>
+    x >= r.x - pad && x < r.x + r.w + pad && y >= r.y - pad && y < r.y + r.h + pad;
+  const blocked = (x, y) =>
+    ground[y][x] !== 0 || inBuildingVisual('overworld', x, y) || inRect(FARMLAND, x, y, 2) ||
+    (Math.abs(x - SPAWN.x) < 3 && Math.abs(y - SPAWN.y) < 3);
+
+  const objects = {};
+  const treeVariant = () => (rnd() < 0.7 ? 'oak' : 'birch');
+  borderTrees(ground, objects, WIDTH, HEIGHT, treeVariant);
+  for (let x = FARMLAND.x - 1; x <= FARMLAND.x + FARMLAND.w; x++) {
+    for (const y of [FARMLAND.y - 1, FARMLAND.y + FARMLAND.h]) if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'fence' };
+  }
+  for (let y = FARMLAND.y - 1; y <= FARMLAND.y + FARMLAND.h; y++) {
+    for (const x of [FARMLAND.x - 1, FARMLAND.x + FARMLAND.w]) if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'fence' };
+  }
+  scatterOnMap('overworld', ground, objects, WIDTH, HEIGHT, rnd, [
+    [60, () => ({ type: 'tree', variant: treeVariant(), hp: 5 })],
+    [30, () => ({ type: 'rock', hp: 3 })],
+    [26, () => ({ type: 'bush', hp: 2 })],
+    [8, () => ({ type: 'stump', hp: 2 })],
+  ], (x, y) => inRect(FARMLAND, x, y, 2) || (Math.abs(x - SPAWN.x) < 3 && Math.abs(y - SPAWN.y) < 3));
   return { ground, objects };
+}
+
+// ---------------- Porto Vale — tela própria, entrada na borda oeste ----------------
+function generatePortoVale(seed) {
+  const rnd = mulberry32(seed ^ 0x504f5254);
+  const ground = [];
+  for (let y = 0; y < PV_H; y++) ground.push(new Array(PV_W).fill(0));
+  const { ellipse, rect } = terrainTools(ground, PV_W, PV_H);
+  rect(0, 17, 35, 19);                  // estrada da borda oeste até a praça
+  ellipse(35, 18, 15, 7);               // praça de Porto Vale
+  openEdge(ground, PV_W, PV_H, 0, 17, 1, 19); // travessia de borda oeste → overworld
+
+  const objects = {};
+  const treeVariant = () => (rnd() < 0.7 ? 'oak' : 'birch');
+  borderTrees(ground, objects, PV_W, PV_H, treeVariant);
+  scatterOnMap('portovale', ground, objects, PV_W, PV_H, rnd, [
+    [20, () => ({ type: 'tree', variant: treeVariant(), hp: 5 })],
+    [10, () => ({ type: 'rock', hp: 3 })],
+    [8, () => ({ type: 'bush', hp: 2 })],
+    [3, () => ({ type: 'stump', hp: 2 })],
+  ]);
+  return { ground, objects, w: PV_W, h: PV_H, spawn: [2, 18] };
+}
+
+// ---------------- South (mina + praia) — tela própria, entrada na borda norte ----------------
+function generateSouth(seed) {
+  const rnd = mulberry32(seed ^ 0x534f5554);
+  const ground = [];
+  for (let y = 0; y < SOUTH_H; y++) ground.push(new Array(SOUTH_W).fill(0));
+  const { ellipse, rect } = terrainTools(ground, SOUTH_W, SOUTH_H);
+  rect(48, 0, 52, 14);                  // estrada da borda norte até o cruzamento
+  rect(20, 12, 85, 14);                 // faixa leste-oeste — bifurcação
+  rect(23, 14, 27, 20);                 // ramal oeste até a entrada da mina
+  rect(78, 14, 82, 20);                 // ramal leste até a praia
+  ellipse(25, 20, 4, 3);                // clareira da entrada da mina
+  paintBeach(ground, SOUTH_W, SOUTH_H, PRAIA);
+
+  const objects = {};
+  const treeVariant = () => (rnd() < 0.7 ? 'oak' : 'birch');
+  borderTrees(ground, objects, SOUTH_W, SOUTH_H, treeVariant);
+  scatterOnMap('south', ground, objects, SOUTH_W, SOUTH_H, rnd, [
+    [40, () => ({ type: 'tree', variant: treeVariant(), hp: 5 })],
+    [20, () => ({ type: 'rock', hp: 3 })],
+    [15, () => ({ type: 'bush', hp: 2 })],
+    [5, () => ({ type: 'stump', hp: 2 })],
+  ]);
+  return { ground, objects, w: SOUTH_W, h: SOUTH_H, spawn: [50, 2] };
 }
 
 // ---------------- telas separadas (mina) ----------------
@@ -248,8 +294,8 @@ function generateWorld(seed) {
 const MINE_W = 34, MINE_H = 22;
 const MINE_UP = [3, 3];                       // escada de subir/sair (canto sup-esq)
 const MINE_DOWN = [MINE_W - 4, MINE_H - 4];   // escada de descer (canto inf-dir)
-// Tile do overworld onde o jogador reaparece ao sair da mina (logo abaixo do prédio).
-const MINE_ENTRANCE_RETURN = [45, 60];
+// Tile do mapa 'south' onde o jogador reaparece ao sair da mina (logo abaixo do prédio).
+const MINE_ENTRANCE_RETURN = [24, 22];
 
 function depthOf(mapKey) { return Number(String(mapKey).split(':')[1]) || 1; }
 
@@ -286,7 +332,7 @@ function makeMineLevel(seed, depth) {
     }
   }
   const entrances = [
-    { at: MINE_UP, kind: 'ladder_up', to: depth === 1 ? 'overworld' : `mine:${depth - 1}`,
+    { at: MINE_UP, kind: 'ladder_up', to: depth === 1 ? 'south' : `mine:${depth - 1}`,
       toSpawn: depth === 1 ? MINE_ENTRANCE_RETURN : [MINE_DOWN[0], MINE_DOWN[1] - 1] },
     { at: MINE_DOWN, kind: 'ladder_down', to: `mine:${depth + 1}`, toSpawn: [MINE_UP[0], MINE_UP[1] + 1] },
   ];
@@ -319,52 +365,70 @@ function makeInterior(kind) {
     objects['2,2'] = { type: 'table' };
   }
   // porta de saída → overworld, na frente do prédio correspondente
-  const b = BUILDINGS.find(bl => bl.type === kind);
+  const b = BUILDINGS.overworld.find(bl => bl.type === kind);
   const ret = b ? [b.door[0], b.door[1] + 1] : [SPAWN.x, SPAWN.y];
   const entrances = [{ at: [INT_DOOR, h - 1], kind: 'door', to: 'overworld', toSpawn: ret }];
   return { ground, objects, entrances, interactables, w, h, spawn: INT_SPAWN.slice() };
 }
 
-// Entradas do overworld (prédios que levam a outras telas): mina, casa e loja.
-function overworldEntrances() {
-  const ents = [];
-  const mine = BUILDINGS.find(b => b.type === 'mine_entrance');
+// Pontos onde os mapas "ao ar livre" (overworld/portovale/south) se cruzam na borda —
+// andar até lá dispara enterMap pra tela vizinha, igual a uma porta.
+const EDGE_LINKS = {
+  overworld: [
+    { at: [91, 12], kind: 'edge_east', to: 'portovale', toSpawn: [2, 18] },
+    { at: [65, HEIGHT - 1], kind: 'edge_south', to: 'south', toSpawn: [50, 2] },
+  ],
+  portovale: [
+    { at: [0, 18], kind: 'edge_west', to: 'overworld', toSpawn: [89, 12] },
+  ],
+  south: [
+    { at: [50, 0], kind: 'edge_north', to: 'overworld', toSpawn: [65, HEIGHT - 3] },
+  ],
+};
+
+// Entradas de um mapa "ao ar livre" (overworld/portovale/south): portas de prédio
+// (casa/loja/mina) + travessias de borda pros mapas vizinhos.
+function worldEntrances(mapKey) {
+  const ents = [...(EDGE_LINKS[mapKey] || [])];
+  const list = BUILDINGS[mapKey] || [];
+  const mine = list.find(b => b.type === 'mine_entrance');
   if (mine) {
     ents.push({ at: [mine.x + Math.floor(mine.w / 2), mine.y + mine.h - 1], kind: 'mine', to: 'mine:1', toSpawn: [MINE_UP[0], MINE_UP[1] + 1] });
   }
   for (const type of ['house', 'shop']) {
-    const b = BUILDINGS.find(bl => bl.type === type);
+    const b = list.find(bl => bl.type === type);
     if (b) ents.push({ at: [b.door[0], b.door[1] + 1], kind: 'door', to: type, toSpawn: INT_SPAWN.slice() });
   }
   return ents;
 }
 
 function initialFarmState(seed) {
-  const { ground, objects } = generateWorld(seed);
+  const { ground, objects } = generateOverworld(seed);
   const state = {
     v: 1,
     seed,
     day: 1, season: 0, year: 1,
     time: 6 * 60,            // minutos do dia de jogo (6:00)
     money: 500,
-    ground,                  // estático após gerar
-    objects,                 // "x,y" -> {type, hp}
-    tiles: {},               // "x,y" -> {tilled, watered, crop:{id, daysGrown}}
+    ground,                  // estático após gerar (overworld)
+    objects,                 // "x,y" -> {type, hp} (overworld)
+    tiles: {},               // "x,y" -> {tilled, watered, crop:{id, daysGrown}} (overworld)
     bin: [],                 // [{item, qty}]
     inventories: {},         // userId -> {items:{id:qty}, energy, can:{level,max}}
     animals: [],             // [{id, type:'chicken', hx, hy}] galinhas do galinheiro
-    eggs: {},                // "x,y" -> {} ovos a coletar
+    eggs: {},                // "x,y" -> {} ovos a coletar (overworld)
     nextAnimalId: 1,
-    buildings: [],           // [{id, type, x, y}] prédios construídos pelo jogador
+    buildings: [],           // [{id, type, x, y}] prédios construídos pelo jogador (overworld)
     nextBuildingId: 1,
-    forage: {},              // "x,y" -> {type} itens para forragear (berry/mushroom/log)
-    maps: {},                // "mine:N" -> {objects} (estado mutável das telas de mina)
+    forage: {},              // "x,y" -> {type} itens para forragear (overworld)
+    maps: {},                // "portovale"/"south"/"mine:N" -> {objects,tiles,forage,eggs}
   };
   scatterForage(state, 25, mulberry32(seed ^ 0x9e37));
   return state;
 }
 
-// Espalha `n` forrageáveis em tiles de grama livres. Chamado na criação e a cada dia.
+// Espalha `n` forrageáveis em tiles de grama livres do OVERWORLD. Chamado na criação e
+// a cada dia (Porto Vale/south/mina não têm reposição diária ainda — próximo passo).
 function scatterForage(state, n, rnd = Math.random) {
   const types = ['berry', 'mushroom', 'mushroom', 'log'];
   const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
@@ -375,7 +439,7 @@ function scatterForage(state, n, rnd = Math.random) {
     const key = `${x},${y}`;
     if (state.ground[y][x] !== 0) continue;
     if (state.tiles[key]) continue;
-    if (inRect(FARMLAND, x, y) || inBuildingVisual(x, y) || inPlayerBuildingOrYard(state, x, y)) continue;
+    if (inRect(FARMLAND, x, y) || inBuildingVisual('overworld', x, y) || inPlayerBuildingOrYard(state, x, y)) continue;
     if (hasNearbyContent(state, x, y)) continue;
     state.forage[key] = { type: types[Math.floor(rnd() * types.length)] };
     n--;
@@ -383,7 +447,8 @@ function scatterForage(state, n, rnd = Math.random) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA, MINE_W, MINE_H,
-  generateWorld, initialFarmState, inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
-  inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, makeInterior, overworldEntrances, depthOf,
+  WIDTH, HEIGHT, TILE, PV_W, PV_H, SOUTH_W, SOUTH_H, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA, MINE_W, MINE_H,
+  generateOverworld, generatePortoVale, generateSouth, initialFarmState,
+  inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
+  inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, makeInterior, worldEntrances, depthOf,
 };

@@ -27,27 +27,29 @@ class Room {
     this.name = farm.name;
     this.state = JSON.parse(farm.state);
     // O ground é estático e derivado do seed: regenera no load para fazendas antigas
-    // receberem melhorias de mapa (praças de terra, caminhos, etc.).
+    // receberem melhorias de mapa (praças de terra, caminhos, etc.). O overworld voltou
+    // a ser só fazenda+vila (Porto Vale e o ramal sul viraram telas próprias — ver
+    // mapOf), então fazendas salvas na versão "mapa gigante" (92x50→150x80) ENCOLHEM de
+    // volta: qualquer objeto/tile fora do novo tamanho menor é limpo pela checagem de
+    // validGround abaixo (this.state.ground[y] fica undefined fora do novo tamanho).
     const oldWidth = this.state.ground[0].length;
     const oldHeight = this.state.ground.length;
-    const fresh = W.generateWorld(this.state.seed);
+    const fresh = W.generateOverworld(this.state.seed);
     this.state.ground = fresh.ground;
     // migração: remove objetos/tiles em posição inválida e adiciona cercas/paredes novas.
-    // Minério só é válido em chão de caverna (ground 3); todo o resto (árvore/pedra/
-    // cerca/parede/etc.) só em grama (0) — sem essa distinção, minério era apagado
-    // sozinho a cada load, já que a checagem antiga só aceitava grama.
     for (const key of Object.keys(this.state.objects)) {
       const [x, y] = key.split(',').map(Number);
       const obj = this.state.objects[key];
-      // cavewall/ore não existem mais no overworld (a mina virou tela separada) —
-      // limpa o entulho da caverna aberta antiga; o resto (árvore/pedra/cerca) só em grama.
+      // cavewall/ore nunca existiram no overworld de verdade (a mina sempre foi tela
+      // separada) — limpa qualquer entulho de versões antigas; o resto só em grama.
       const validGround = this.state.ground[y] && this.state.ground[y][x] === 0;
       const validType = obj.type !== 'cavewall' && obj.type !== 'ore';
-      if (W.inBuildingVisual(x, y) || !validGround || !validType) delete this.state.objects[key];
+      if (W.inBuildingVisual('overworld', x, y) || !validGround || !validType) delete this.state.objects[key];
     }
     for (const key of Object.keys(this.state.tiles)) {
       const [x, y] = key.split(',').map(Number);
-      if (this.state.ground[y][x] !== 0 || W.inBuildingVisual(x, y)) delete this.state.tiles[key];
+      const validGround = this.state.ground[y] && this.state.ground[y][x] === 0;
+      if (!validGround || W.inBuildingVisual('overworld', x, y)) delete this.state.tiles[key];
     }
     for (const [key, obj] of Object.entries(fresh.objects)) {
       const structural = obj.type === 'fence' || obj.type === 'cavewall';
@@ -87,12 +89,14 @@ class Room {
   playersOnMap(mapKey) { return [...this.players.values()].filter(q => (q.map || 'overworld') === mapKey); }
 
   // Contêineres mutáveis (ground/objects/tiles/forage/eggs) do mapa. Overworld = campos
-  // top-level do estado; mina = gerada sob demanda, objetos (minério) persistidos em
-  // state.maps. Só ground/objects/tiles/forage/eggs são por-mapa; dinheiro/dia/prédios/
-  // animais/inventários são globais da fazenda.
+  // top-level do estado (sempre existiu assim). Casa/loja = estáticos, geram de novo toda
+  // vez (nada muda lá). Porto Vale/south/mina = "ao ar livre" mutáveis, persistidos em
+  // state.maps[mapKey] igual ao overworld, só que num container próprio em vez de
+  // top-level. Só ground/objects/tiles/forage/eggs são por-mapa; dinheiro/dia/prédios/
+  // animais/inventários continuam globais da fazenda (só existem no overworld hoje).
   mapOf(mapKey) {
     if (!mapKey || mapKey === 'overworld') {
-      if (!this._owEntrances) this._owEntrances = W.overworldEntrances();
+      if (!this._owEntrances) this._owEntrances = W.worldEntrances('overworld');
       return {
         key: 'overworld',
         ground: this.state.ground, objects: this.state.objects, tiles: this.state.tiles,
@@ -110,14 +114,20 @@ class Room {
           ground: gen.ground, objects: gen.objects, tiles: {}, forage: {}, eggs: {},
           w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn, interactables: gen.interactables,
         };
-      } else { // mina: objetos (minério) persistidos por nível
-        const gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey));
+      } else {
+        // Porto Vale / south / mina: gera o terreno e persiste o estado mutável em
+        // state.maps[mapKey] (preguiçoso — só na primeira visita).
+        let gen, entrances;
+        if (mapKey === 'portovale') { gen = W.generatePortoVale(this.state.seed); entrances = W.worldEntrances('portovale'); }
+        else if (mapKey === 'south') { gen = W.generateSouth(this.state.seed); entrances = W.worldEntrances('south'); }
+        else { gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey)); entrances = gen.entrances; }
         if (!this.state.maps) this.state.maps = {};
-        if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects };
+        if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {} };
+        const saved = this.state.maps[mapKey];
         this._maps[mapKey] = {
           key: mapKey,
-          ground: gen.ground, objects: this.state.maps[mapKey].objects, tiles: {}, forage: {}, eggs: {},
-          w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn,
+          ground: gen.ground, objects: saved.objects, tiles: saved.tiles, forage: saved.forage, eggs: saved.eggs,
+          w: gen.w, h: gen.h, entrances, spawn: gen.spawn,
         };
       }
     }
@@ -134,7 +144,7 @@ class Room {
       map: m.key,
       world: {
         width: m.w, height: m.h, tile: W.TILE,
-        ground: m.ground, buildings: isOw ? W.BUILDINGS : [], spawn: m.spawn,
+        ground: m.ground, buildings: W.BUILDINGS[m.key] || [], spawn: m.spawn,
         buildingDefs: W.BUILDING_DEFS,
         entrances: m.entrances.map(e => ({ at: e.at, kind: e.kind })),
         interactables: m.interactables || [],
@@ -171,9 +181,11 @@ class Room {
 
   inBounds(x, y) { return x >= 0 && y >= 0 && x < W.WIDTH && y < W.HEIGHT; }
 
-  isBuildingTile(x, y) {
+  // mapKey opcional — default 'overworld' (todo mundo que chamava isso antes só existia
+  // dentro de ações do overworld mesmo). Prédios do jogador (coop) só existem lá.
+  isBuildingTile(x, y, mapKey = 'overworld') {
     const hit = (b) => { const r = W.collisionRect(b); return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
-    return W.BUILDINGS.some(hit) || this.state.buildings.some(hit);
+    return (W.BUILDINGS[mapKey] || []).some(hit) || (mapKey === 'overworld' && this.state.buildings.some(hit));
   }
 
   // Galinheiros construídos (para ovos e compra de galinha)
@@ -360,7 +372,7 @@ class Room {
       const y = 1 + Math.floor(Math.random() * (W.HEIGHT - 2));
       const key = `${x},${y}`;
       const inFarm = x >= W.FARMLAND.x - 2 && x < W.FARMLAND.x + W.FARMLAND.w + 2 && y >= W.FARMLAND.y - 2 && y < W.FARMLAND.y + W.FARMLAND.h + 2;
-      if (s.ground[y][x] !== 0 || s.tiles[key] || inFarm || W.inBuildingVisual(x, y) || W.inPlayerBuildingOrYard(s, x, y)) continue;
+      if (s.ground[y][x] !== 0 || s.tiles[key] || inFarm || W.inBuildingVisual('overworld', x, y) || W.inPlayerBuildingOrYard(s, x, y)) continue;
       if (W.hasNearbyContent(s, x, y)) continue;
       s.objects[key] = Math.random() < 0.6 ? { type: 'tree', hp: 5 } : { type: 'rock', hp: 3 };
       n--;
@@ -580,7 +592,7 @@ class Room {
     if (!p || !data || p.map !== 'overworld') return;
     const def = RECIPES[String(data.recipe || '')];
     if (!def) return;
-    if (!W.BUILDINGS.some(b => b.type === 'bench' && this.near(p, b.x, b.y))) {
+    if (!W.BUILDINGS.overworld.some(b => b.type === 'bench' && this.near(p, b.x, b.y))) {
       socket.emit('err', { code: 'need_bench' }); return;
     }
     const inv = this.inv(p.userId);
@@ -602,7 +614,7 @@ class Room {
     const s = this.state;
     const q = s.quest;
     if (!q) return;
-    if (!W.BUILDINGS.some(b => b.type === 'board' && this.near(p, b.x, b.y))) {
+    if (!W.BUILDINGS.overworld.some(b => b.type === 'board' && this.near(p, b.x, b.y))) {
       socket.emit('err', { code: 'need_board' }); return;
     }
     const inv = this.inv(p.userId);
