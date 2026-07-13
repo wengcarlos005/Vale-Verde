@@ -127,6 +127,9 @@ class GameScene extends Phaser.Scene {
     for (const m of ['iron', 'copper', 'gold']) L.image(`ore_${m}`, `/assets/ore_${m}.png`);
     L.image('city_hall', '/assets/city_hall.png');
     L.image('city_house', '/assets/city_house.png');
+    L.image('cabin_green', '/assets/cabin_green.png');
+    L.image('cabin_dark', '/assets/cabin_dark.png');
+    L.spritesheet('boat', '/assets/boat.png', { frameWidth: 48, frameHeight: 48 });
     L.image('hay', '/assets/hay.png');
     L.image('log_fallen', '/assets/log_fallen.png');
     L.image('coop', '/assets/coop.png');
@@ -220,6 +223,7 @@ class GameScene extends Phaser.Scene {
     this.anims.create({ key: 'water_flow', frames: this.anims.generateFrameNumbers('water', { start: 0, end: 7 }), frameRate: 4, repeat: -1 });
     this.anims.create({ key: 'bob_idle', frames: this.anims.generateFrameNumbers('bob', { start: 0, end: 5 }), frameRate: 5, repeat: -1 });
     this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly', { start: 0, end: 3 }), frameRate: 10, repeat: -1 });
+    this.anims.create({ key: 'boat_bob', frames: this.anims.generateFrameNumbers('boat', { start: 0, end: 3 }), frameRate: 3, repeat: -1 });
     // galinha: linha 0 idle (0-1), linha 1 anda p/ baixo (8-13), linha 2 lado (16-21), linha 3 cima (24-29)
     this.anims.create({ key: 'chicken_idle', frames: this.anims.generateFrameNumbers('chicken', { start: 0, end: 1 }), frameRate: 3, repeat: -1 });
     this.anims.create({ key: 'chicken_down', frames: this.anims.generateFrameNumbers('chicken', { start: 8, end: 13 }), frameRate: 8, repeat: -1 });
@@ -508,6 +512,9 @@ class GameScene extends Phaser.Scene {
       else if (b.type === 'city_hall') this.add.image(bx, by, 'city_hall').setOrigin(0, 1).setDepth(depth);
       else if (b.type === 'city_house') this.add.image(bx, by, 'city_house').setOrigin(0, 1).setDepth(depth);
       else if (b.type === 'mine_entrance') this.add.image(bx, by, 'mine_entrance').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'cabin_green') this.add.image(bx, by, 'cabin_green').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'cabin_dark') this.add.image(bx, by, 'cabin_dark').setOrigin(0, 1).setDepth(depth);
+      else if (b.type === 'boat') this.add.sprite(bx, by, 'boat', 0).setOrigin(0, 1).setDepth(depth).play('boat_bob');
       // casa/loja agora são ENTRADAS (viram tela de interior); só a caixa de venda
       // (bin) e bancada/quadro continuam como interação in-loco no overworld.
       if (b.door && b.type === 'bin') {

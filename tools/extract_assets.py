@@ -175,6 +175,14 @@ for name, row in ORE_ROWS.items():
     cell.save(o(f"ore_{name}.png"))
     cell.resize((32, 32), Image.NEAREST).save(o(f"icons/item_{name}.png"))
 
+# ---------- Praia/porto (Fase C, mundo completo) ----------
+# Barco balançando na água (4 frames), decoração animada do "porto" perto da areia.
+load(p("Outdoor decoration", "Outdoor_Decor_Animations", "Other_Animations", "Boat_Anim.png")).save(o("boat.png"))  # 192x48
+# Cabanas ao redor da praia: variantes de casa pequena (mesma classe de tamanho da
+# loja, 96x128), cores diferentes das já usadas em outro lugar do mapa.
+load(p("Buildings", "Buildings", "Houses", "Wood", "House_1_Wood_Green_Blue.png")).save(o("cabin_green.png"))
+load(p("Buildings", "Buildings", "Houses", "Wood", "House_1_Wood_Base_Black.png")).save(o("cabin_dark.png"))
+
 # ---------- Porto Vale (cidade grande, Fase C) ----------
 # Arquiteturas diferentes da fazenda (madeira vermelha) e da vila (pedra azul), pra
 # cidade grande ter identidade própria. Ambas decorativas por ora.

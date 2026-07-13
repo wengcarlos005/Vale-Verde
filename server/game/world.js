@@ -12,7 +12,7 @@ const TILE = 16;
 
 // Dimensões dos mapas "ao ar livre" separados (Porto Vale e o ramal sul).
 const PV_W = 60, PV_H = 36;
-const SOUTH_W = 100, SOUTH_H = 42;
+const SOUTH_W = 100, SOUTH_H = 46;
 
 function mulberry32(seed) {
   return function () {
@@ -49,6 +49,15 @@ const BUILDINGS = {
     // Mina — arco esculpido na rocha, puramente decorativo (h todo virou padBottom: o
     // jogador tem que poder atravessar o vão andando, não é uma porta/parede de verdade).
     { type: 'mine_entrance', x: 23, y: 18, w: 3, h: 3, padBottom: 3 },
+    // Porto: barquinho animado (bóia) ancorado na areia, de frente pra uma pequena
+    // enseada de oceano — decorativo, dá vida ao "porto" pedido sem depender do
+    // tileset de doca (autotile complexo demais pra compor à mão com robustez).
+    { type: 'boat', x: 57, y: 25, w: 3, h: 3, padBottom: 1 },
+    // Cabanas de pescador ao redor da praia (mesma classe de tamanho da loja,
+    // 96x128), espalhadas na faixa de grama entre o ramal da mina e a areia.
+    { type: 'cabin_green', x: 34, y: 25, w: 6, h: 4, padBottom: 1 },
+    { type: 'cabin_dark',  x: 42, y: 25, w: 6, h: 4, padBottom: 1 },
+    { type: 'cabin_green', x: 34, y: 34, w: 6, h: 4, padBottom: 1 },
   ],
 };
 
@@ -126,7 +135,7 @@ const POND = { x: 44, y: 36, w: 12, h: 10 };
 const FARMLAND = { x: 8, y: 15, w: 29, h: 17 }; // área mantida livre de objetos
 const SPAWN = { x: 18, y: 12 };
 // Praia (mapa 'south'): areia com franja pro mar aberto no canto sul-leste do mapa.
-const PRAIA = { x: 55, y: 18, w: 42, h: 22 };
+const PRAIA = { x: 52, y: 14, w: 46, h: 30 };
 
 // ---------------- helpers de terreno compartilhados pelos 3 geradores ----------------
 function terrainTools(ground, w, h) {
@@ -269,9 +278,9 @@ function generateSouth(seed) {
   for (let y = 0; y < SOUTH_H; y++) ground.push(new Array(SOUTH_W).fill(0));
   const { ellipse, rect } = terrainTools(ground, SOUTH_W, SOUTH_H);
   rect(48, 0, 52, 14);                  // estrada da borda norte até o cruzamento
-  rect(20, 12, 85, 14);                 // faixa leste-oeste — bifurcação
+  rect(20, 12, 51, 14);                 // faixa leste-oeste — só até a beira da praia (PRAIA.x=52),
+                                         // pra não cortar um pedaço de estrada dentro da areia
   rect(23, 14, 27, 20);                 // ramal oeste até a entrada da mina
-  rect(78, 14, 82, 20);                 // ramal leste até a praia
   ellipse(25, 20, 4, 3);                // clareira da entrada da mina
   paintBeach(ground, SOUTH_W, SOUTH_H, PRAIA);
 
