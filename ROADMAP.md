@@ -67,8 +67,21 @@ Próximos prédios (celeiro, estufa, silo, baú, cerca) entram como novas entrad
   cenário/atmosfera — sem loja ligada nem pesca. Próximo passo natural: dar função às
   casas de Porto Vale (ferreiro/sementeiro/mercado — o ferro/cobre/ouro já mineráveis
   pedem uma forja) e o minigame de pesca na praia/lago.
+- ✅ **Telas separadas (mina + interiores) + praia bonita:** o feedback do usuário virou
+  esta leva. (1) Praia refeita com o tileset de blob do pack (foam suave areia↔água,
+  textura de pedriscos na areia, transição grama→areia via dirt_fringe) — nada de degrau
+  quadrado. (2) A mina deixou de ser área no mapa aberto e virou **telas próprias com
+  níveis** (escada desce; minério mais raro/valioso quanto mais fundo). (3) **Interiores**
+  da casa (cama → dormir) e da loja (balcão do Bob → comprar) como telas de dentro.
+  Isso exigiu um **sistema de troca de cenário**: uma Room hospeda vários mapas
+  (overworld + mina:N + house/shop), player tem `p.map`, canais socket por mapa
+  (`farm:ID:MAPA`) pra movimento/objetos e canal global pra chat/relógio/dinheiro; `enterMap`
+  valida a entrada e reenvia `joined` (cliente reconstrói a cena). É o "plano B" que estava
+  documentado como nota técnica — agora implementado de verdade.
+  Próximo passo natural: dar função às casas de Porto Vale (entrar → loja de ferreiro que
+  usa o minério), mais níveis/perigo na mina, pesca.
 - **Mais bairros/vilarejos:** o mesmo padrão (praça + estrada) pode repetir em outras direções
-  do mapa pra criar mais povoados, sem precisar de arquitetura nova.
+  do mapa pra criar mais povoados; e o sistema de cenário permite dungeons/interiores novos.
 
 ## Fase D — Progressão de longo prazo
 
