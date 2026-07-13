@@ -59,12 +59,12 @@ export class Hud {
     log.scrollTop = log.scrollHeight;
   }
 
-  toast(msg) {
+  toast(msg, ms = 2400) {
     const el = $('toast');
     el.textContent = msg;
     el.style.display = 'block';
     clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.display = 'none'; }, 2400);
+    el._t = setTimeout(() => { el.style.display = 'none'; }, ms);
   }
 
   // ---------- estado ----------

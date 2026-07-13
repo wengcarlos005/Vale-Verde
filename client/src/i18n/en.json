@@ -104,6 +104,8 @@
   "err.farm_not_found": "Farm not found. Check the code.",
   "err.farm_full": "That farm already has 6 members.",
   "err.network": "Connection error. Try again.",
+  "err.reconnecting": "Connection dropped — reconnecting...",
+  "err.reconnected": "Reconnected! ✅",
 
   "item.wood": "Wood",
   "item.stone": "Stone",

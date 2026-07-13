@@ -83,7 +83,7 @@ export function startGame(farm) {
 const GAME_EVENTS = [
   'playerJoined', 'playerLeft', 'playerMoved', 'playerAppearance', 'chat', 'tile', 'object',
   'egg', 'forage', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
-  'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect',
+  'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect', 'connect',
 ];
 
 class GameScene extends Phaser.Scene {
@@ -1178,7 +1178,14 @@ class GameScene extends Phaser.Scene {
       if (d.eggs) this.setEggs(d.eggs);
       if (d.forage) this.setForageAll(d.forage);
     });
-    s.on('disconnect', () => this.hud.toast(t('err.network')));
+    // Queda de conexão (comum no plano grátis do Render) — o socket.io tenta reconectar
+    // sozinho, e o servidor reenvia 'joined' quando reconecta (o handler já registrado em
+    // startGame() reconstrói a cena inteira). Mensagem só avisa que está reconectando; se
+    // realmente reconectar, confirma. Não é um erro definitivo, então o texto não assusta.
+    s.on('disconnect', () => { this._wasDisconnected = true; this.hud.toast(t('err.reconnecting'), 6000); });
+    s.on('connect', () => {
+      if (this._wasDisconnected) { this._wasDisconnected = false; this.hud.toast(t('err.reconnected')); }
+    });
   }
 
   sendMove(force) {

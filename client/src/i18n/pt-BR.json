@@ -104,6 +104,8 @@
   "err.farm_not_found": "Fazenda não encontrada. Confira o código.",
   "err.farm_full": "Essa fazenda já tem 6 membros.",
   "err.network": "Erro de conexão. Tente de novo.",
+  "err.reconnecting": "Conexão caiu — reconectando...",
+  "err.reconnected": "Reconectado! ✅",
 
   "item.wood": "Madeira",
   "item.stone": "Pedra",
