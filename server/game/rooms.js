@@ -124,6 +124,17 @@ class Room {
         if (!this.state.maps) this.state.maps = {};
         if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {} };
         const saved = this.state.maps[mapKey];
+        // Migração: terreno "ao ar livre" é sempre regerado do código atual (não salvo),
+        // então se a geração mudar (praia cresceu, estrada mudou de forma...) um objeto
+        // persistido (árvore/pedra/arbusto/toco) pode ficar preso em cima de areia/água/
+        // estrada que antes era grama. Limpa qualquer objeto fora de grama — mesmo
+        // princípio da limpeza de validGround que já existe pro overworld.
+        if (mapKey === 'south' || mapKey === 'portovale') {
+          for (const okey of Object.keys(saved.objects)) {
+            const [ox, oy] = okey.split(',').map(Number);
+            if (!(gen.ground[oy] && gen.ground[oy][ox] === 0)) { delete saved.objects[okey]; this.dirty = true; }
+          }
+        }
         this._maps[mapKey] = {
           key: mapKey,
           ground: gen.ground, objects: saved.objects, tiles: saved.tiles, forage: saved.forage, eggs: saved.eggs,
@@ -420,9 +431,13 @@ class Room {
         this.addItem(inv, 'egg', 1);
         this.emitMap(p.map, 'egg', { key, egg: null });
       } else if (m.forage[key]) {
-        const def = FORAGE[m.forage[key].type];
+        const f = m.forage[key];
+        const def = FORAGE[f.type];
         delete m.forage[key];
-        if (def) this.addItem(inv, def.give, def.qty);
+        // drops de corte/mineração carregam give/qty próprios (não vêm da tabela FORAGE,
+        // que é só pros forrageáveis "nativos" berry/mushroom/log); um cobre o outro.
+        if (f.give) this.addItem(inv, f.give, f.qty || 1);
+        else if (def) this.addItem(inv, def.give, def.qty);
         this.emitMap(p.map, 'forage', { key, item: null });
       } else return;
       this.dirty = true;
@@ -483,9 +498,12 @@ class Room {
         const drop = obj.type === 'rock' ? ['stone', 3]
           : obj.type === 'ore' ? [obj.mineral, 2]
           : ['wood', obj.type === 'tree' ? 3 : 1];
-        this.addItem(inv, drop[0], drop[1]);
+        // Cai no CHÃO em vez de ir direto pro inventário — o jogador precisa passar por
+        // cima pra coletar (mesmo mecanismo de forage: `type` dobra como visual E dá
+        // give/qty próprios, sem passar pela tabela FORAGE fixa de berry/mushroom/log).
+        m.forage[key] = { type: drop[0], give: drop[0], qty: drop[1] };
         this.emitMap(p.map, 'object', { key, obj: null });
-        socket.emit('inv', inv);
+        this.emitMap(p.map, 'forage', { key, item: m.forage[key] });
       } else {
         this.emitMap(p.map, 'object', { key, obj });
       }

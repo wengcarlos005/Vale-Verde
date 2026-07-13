@@ -17,6 +17,12 @@ const TILLED_BLOB = {
 export const HAIR_COLORS = ['black', 'blonde', 'brown', 'ginger', 'grey'];
 export const OUTFIT_COLORS = ['black', 'blue', 'green', 'orange', 'pink', 'purple', 'red', 'white_and_brown'];
 
+// Pegada de colisão (em tiles) dos objetos de interior maiores que 1x1 — sem isso só o
+// tile-âncora bloqueava e dava pra "entrar" visualmente dentro do resto do sprite (mesa,
+// balcão, cama, prateleira). Ancorado no canto inferior-esquerdo, igual ao render (mesma
+// convenção de `by = y*T+T`, origin(0,1)): cobre colunas [ax, ax+w) e linhas (ay-h, ay].
+const OBJ_FOOTPRINT = { table: [3, 2], counter: [3, 2], bed: [2, 2], shelf: [2, 2] };
+
 const T = 16;                       // tile
 const SPEED = 95;                   // px/s
 const ROWS = { idle: { down: 0, right: 1, up: 2 }, walk: { down: 3, right: 4, up: 5 }, act: { down: 6, right: 7, up: 8 } };
@@ -125,6 +131,8 @@ class GameScene extends Phaser.Scene {
     L.image('bed', '/assets/bed.png');
     L.image('table', '/assets/table.png');
     L.image('rug', '/assets/rug.png');
+    L.image('shelf', '/assets/shelf.png');
+    L.image('chest', '/assets/chest.png');
     for (const m of ['iron', 'copper', 'gold']) L.image(`ore_${m}`, `/assets/ore_${m}.png`);
     L.image('city_hall', '/assets/city_hall.png');
     L.image('city_house', '/assets/city_house.png');
@@ -138,6 +146,11 @@ class GameScene extends Phaser.Scene {
     L.image('forage_berry', '/assets/forage_berry.png');
     L.image('forage_mushroom', '/assets/forage_mushroom.png');
     L.image('forage_log', '/assets/forage_log.png');
+    L.image('forage_wood', '/assets/forage_wood.png');
+    L.image('forage_stone', '/assets/forage_stone.png');
+    L.image('forage_iron', '/assets/forage_iron.png');
+    L.image('forage_copper', '/assets/forage_copper.png');
+    L.image('forage_gold', '/assets/forage_gold.png');
     for (const tl of ['hoe', 'can', 'axe', 'pickaxe']) L.image(`tool_${tl}`, `/assets/icons/tool_${tl}.png`);
     L.spritesheet('chicken', '/assets/chicken.png', { frameWidth: 32, frameHeight: 32 });
     L.spritesheet('rock', '/assets/rock.png', { frameWidth: 32, frameHeight: 32 });
@@ -679,6 +692,10 @@ class GameScene extends Phaser.Scene {
       sprite = this.add.image(x * T, by, 'bed').setOrigin(0, 1).setDepth(by); // sprite 32x32 (2 tiles)
     } else if (obj.type === 'table' || obj.type === 'counter') {
       sprite = this.add.image(x * T, by, 'table').setOrigin(0, 1).setDepth(by);
+    } else if (obj.type === 'shelf') {
+      sprite = this.add.image(x * T, by, 'shelf').setOrigin(0, 1).setDepth(by);
+    } else if (obj.type === 'chest') {
+      sprite = this.add.image(cx, by, 'chest').setOrigin(0.5, 1).setDepth(by);
     } else {
       sprite = this.add.image(cx, by, 'stump').setOrigin(0.5, 1).setDepth(by);
     }
@@ -884,6 +901,17 @@ class GameScene extends Phaser.Scene {
     if (this.world.ground[y][x] === 1 || this.world.ground[y][x] === 5) return true; // água (lago/oceano)
     const hereObj = this.objectsState[`${x},${y}`];
     if (hereObj && hereObj.type !== 'rug') return true; // tapete é decoração de chão, não bloqueia
+    // objetos maiores que 1x1 (mesa/balcão/cama/prateleira): procura uma âncora próxima
+    // cuja pegada (OBJ_FOOTPRINT) cubra este tile, senão só o tile-âncora bloqueava.
+    for (let ddx = -3; ddx <= 0; ddx++) {
+      for (let ddy = -2; ddy <= 0; ddy++) {
+        if (ddx === 0 && ddy === 0) continue; // já checado acima
+        const ax = x + ddx, ay = y + ddy;
+        const o = this.objectsState[`${ax},${ay}`];
+        const fp = o && OBJ_FOOTPRINT[o.type];
+        if (fp && x >= ax && x < ax + fp[0] && y > ay - fp[1] && y <= ay) return true;
+      }
+    }
     const key = `${x},${y}`;
     if (this.propBlockers && this.propBlockers.has(key)) return true;
     if (this.npcBlockers && this.npcBlockers.has(key)) return true;
@@ -1121,9 +1149,12 @@ class GameScene extends Phaser.Scene {
   tryInteract() {
     const me = this.players.get(this.me);
     const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
-    // entrada de tela (mina/escada/porta) tem prioridade
+    // entrada de tela (mina/escada/porta) tem prioridade. Porta exige alinhamento exato
+    // na coluna (tem que estar literalmente EM FRENTE, não do lado) — mina/escada/borda
+    // continuam com folga de 1 tile (vãos maiores, sem essa exigência de "de frente").
     for (const e of this.entrances) {
-      if (Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1) { this.socket.emit('enterMap'); return; }
+      const tolX = e.kind === 'door' ? 0 : 1;
+      if (Math.abs(px - e.at[0]) <= tolX && Math.abs(py - e.at[1]) <= 1) { this.socket.emit('enterMap'); return; }
     }
     // móveis interativos de interior (cama = dormir, balcão = loja)
     for (const it of this.interactables) {

@@ -370,9 +370,14 @@ function makeInterior(kind) {
     interactables.push({ at: [2, 2], kind: 'bed' });
     objects['6,2'] = { type: 'table' };          // mesa decorativa (sprite ~3 tiles, cabe em 6-8)
   } else { // shop
-    objects[`${INT_DOOR},2`] = { type: 'counter' }; // balcão do Bob (E → abrir loja)
-    interactables.push({ at: [INT_DOOR, 3], kind: 'counter' });
-    objects['2,2'] = { type: 'table' };
+    // Antes reaproveitava a mesma mesa 2x lado a lado (sem cara de loja nenhuma).
+    // Agora: prateleiras de mercadoria na parede de fundo + balcão mais pro centro
+    // (jogador entra e já vê "loja"), baú decorativo do lado.
+    objects['2,2'] = { type: 'shelf' };             // prateleira de mercadoria (parede de fundo)
+    objects['7,2'] = { type: 'shelf' };
+    objects['4,4'] = { type: 'counter' };            // balcão do Bob (E → abrir loja)
+    interactables.push({ at: [5, 5], kind: 'counter' });
+    objects['8,5'] = { type: 'chest' };              // baú de mercadoria, decorativo
   }
   // porta de saída → overworld, na frente do prédio correspondente
   const b = BUILDINGS.overworld.find(bl => bl.type === kind);

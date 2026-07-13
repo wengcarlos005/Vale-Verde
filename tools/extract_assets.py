@@ -169,6 +169,8 @@ load(p("Buildings", "Houses_Interiors", "Wood_Floor_Tiles.png")).crop((96, 16, 1
 load(p("Buildings", "House_Decor", "Carpets.png")).crop((0, 400, 48, 448)).save(o("rug.png"))  # tapete vermelho 3x3 (48x48), decoração de chão sem colisão
 load(p("Buildings", "House_Decor", "Beds.png")).crop((0, 160, 32, 192)).save(o("bed.png"))     # cama de casal vermelha, 32x32
 load(p("Buildings", "House_Decor", "Tables.png")).crop((8, 24, 58, 57)).save(o("table.png"))   # mesa/balcão de madeira (bbox justo — crop antigo cortava o topo), 50x33
+load(p("Buildings", "House_Decor", "BookShelves.png")).crop((65, 1, 95, 31)).save(o("shelf.png"))  # prateleira c/ potes coloridos, 30x30 — dá "cara de loja" pro interior
+load(p("Buildings", "House_Decor", "Chest_Anim.png")).crop((0, 0, 16, 16)).save(o("chest.png"))    # baú fechado (frame estático), 16x16, decoração de mercadoria
 
 # Minérios: linha = mineral (0 ferro, 1 cobre, 2 ouro), coluna 3 = estágio com o
 # minério bem exposto/colorido (colunas 0-2 são quase só pedra cinza, pouco legíveis).
@@ -178,6 +180,14 @@ for name, row in ORE_ROWS.items():
     cell = ores.crop((3 * 16, row * 16, 4 * 16, row * 16 + 16))
     cell.save(o(f"ore_{name}.png"))
     cell.resize((32, 32), Image.NEAREST).save(o(f"icons/item_{name}.png"))
+    cell.save(o(f"forage_{name}.png"))  # mesmo sprite: minério largado no chão ao minerar (walk-over)
+
+# Drops de corte/mineração no chão (walk-over, mesmo mecanismo do forrageio) — árvore/
+# arbusto/toco derrubam madeira (reaproveita o sprite de tronco já usado no forrageio
+# nativo), pedra derruba uma pedrinha pequena (sprite de mundo com sombra própria, NÃO
+# um ícone de UI — ver a lição de forage_berry/mushroom logo acima).
+load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 7 * 16, 32, 8 * 16)).save(o("forage_wood.png"))
+load(p("Outdoor decoration", "Outdoor_Decor_Animations", "Rock_Animations", "Rock_2_Anim.png")).crop((0, 0, 16, 16)).save(o("forage_stone.png"))
 
 # ---------- Praia/porto (Fase C, mundo completo) ----------
 # Barco balançando na água (4 frames), decoração animada do "porto" perto da areia.
