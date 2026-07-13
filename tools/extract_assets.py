@@ -151,7 +151,11 @@ load(p("Buildings", "Buildings", "Houses", "Stone", "House_3_Stone_Base_Blue.png
 # ---------- mina e praia (Fase C, mundo completo) ----------
 load(p("Tiles", "Cave", "Cave_Floor_1.png")).crop((0, 0, 16, 16)).save(o("cave_floor.png"))
 load(p("Tiles", "Cave", "Cave_Walls.png")).crop((16, 96, 32, 128)).save(o("cavewall.png"))  # parede/viga, 16x32
-load(p("Tiles", "Beach", "Beach_Tiles.png")).crop((14, 17, 30, 33)).save(o("sand.png"))  # recorte plano do centro do blob de areia
+# Praia: blob autotile de areia/água (mesma família do Grass_Tiles_2 do lago). Sheet
+# 30x3; uso os frames do bloco 3x3 de "ilha de areia" (cols 0-2 = bordas/cantos convexos
+# com foam) + o buraco d'água (cols 3-4 = cantos côncavos/notch). Frame idx = row*30+col.
+load(p("Tiles", "Beach", "Beach_Tiles.png")).save(o("beach.png"))  # 480x48, spritesheet 16px
+load(p("Tiles", "Beach", "Beach_Decor_Tiles.png")).save(o("sand_decor.png"))  # 32x32 = 4 variantes de areia com textura/pedriscos
 load(p("Tiles", "Cliff", "Stone_Cliff_1_Cave_Entrance.png")).save(o("mine_entrance.png"))  # arco esculpido na rocha, 48x48, decorativo (sem colisão)
 
 # Minérios: linha = mineral (0 ferro, 1 cobre, 2 ouro), coluna 3 = estágio com o

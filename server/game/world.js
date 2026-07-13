@@ -174,14 +174,28 @@ function generateWorld(seed) {
     for (let x = MINA.x; x < MINA.x + MINA.w; x++)
       if (ground[y][x] === 0) ground[y][x] = 3;
 
-  // Praia: areia cobrindo a região toda; oceano aberto na diagonal sul-leste (costa
-  // reta, não um lago redondo) — chega até a borda do mapa de propósito, pra não ter
-  // parede de árvore ali e parecer que o mar continua além da tela.
+  // Praia: areia + oceano aberto na diagonal sul-leste, chegando à borda do mapa (o mar
+  // "continua" além da tela). Costa ORGÂNICA (ondulada por seno determinístico), não um
+  // degrau reto — o autotile de foam do cliente faz a transição suave areia↔água. Uma
+  // margem de areia garantida perto da grama impede oceano colado na grama (sempre tem
+  // areia no meio, pro cliente desenhar a transição grama→areia suave).
   for (let y = PRAIA.y; y < PRAIA.y + PRAIA.h; y++) {
     for (let x = PRAIA.x; x < PRAIA.x + PRAIA.w; x++) {
       if (ground[y][x] !== 0) continue;
       const dx = x - PRAIA.x, dy = y - PRAIA.y;
-      ground[y][x] = (dx + dy * 1.4 > PRAIA.w * 0.55) ? 5 : 4;
+      const coast = dx * 0.7 + dy * 1.15;
+      const wave = 2.3 * Math.sin(x * 0.55) + 1.7 * Math.sin(y * 0.8 + x * 0.15);
+      ground[y][x] = (coast > 6 && coast + wave > PRAIA.w * 0.42) ? 5 : 4;
+    }
+  }
+  // Buffer de areia: onde a onda empurrou oceano encostado na grama, volta pra areia —
+  // grama nunca toca oceano direto (sempre tem areia no meio pro cliente fazer a
+  // transição grama→areia→foam suave).
+  for (let y = PRAIA.y; y < PRAIA.y + PRAIA.h; y++) {
+    for (let x = PRAIA.x; x < PRAIA.x + PRAIA.w; x++) {
+      if (ground[y][x] !== 5) continue;
+      const g0 = (xx, yy) => yy >= 0 && yy < HEIGHT && xx >= 0 && xx < WIDTH && ground[yy][xx] === 0;
+      if (g0(x, y - 1) || g0(x, y + 1) || g0(x - 1, y) || g0(x + 1, y)) ground[y][x] = 4;
     }
   }
 

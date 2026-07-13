@@ -100,7 +100,8 @@ class GameScene extends Phaser.Scene {
     L.image('board', '/assets/board.png');
     L.image('store', '/assets/store.png');
     L.spritesheet('cave_floor', '/assets/cave_floor.png', { frameWidth: T, frameHeight: T });
-    L.spritesheet('sand', '/assets/sand.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('beach', '/assets/beach.png', { frameWidth: T, frameHeight: T });
+    L.spritesheet('sand_decor', '/assets/sand_decor.png', { frameWidth: T, frameHeight: T });
     L.image('cavewall', '/assets/cavewall.png');
     L.image('mine_entrance', '/assets/mine_entrance.png');
     for (const m of ['iron', 'copper', 'gold']) L.image(`ore_${m}`, `/assets/ore_${m}.png`);
@@ -296,6 +297,19 @@ class GameScene extends Phaser.Scene {
       if (s && e) rt.drawFrame('dirt_fringe', 7, X, Y);
       else if (!s && !e && se) rt.drawFrame('dirt_fringe', 11, X, Y);
     };
+    // Autotile da praia: para um tile de AREIA, escolhe o frame do blob (Beach_Tiles,
+    // 30 col) conforme quais vizinhos são OCEANO (5) — foam suave na borda areia↔água.
+    // idx = row*30+col; centro 31, bordas T1/B61/L30/R32, cantos convexos TL0/TR2/BL60/BR62,
+    // notches côncavos (só a diagonal é oceano) NW34/NE33/SW4/SE3.
+    const beachFrame = (x, y) => {
+      const oc = (xx, yy) => at(xx, yy, 5);
+      const n = oc(x, y - 1), s = oc(x, y + 1), w = oc(x - 1, y), e = oc(x + 1, y);
+      if (n && w) return 0; if (n && e) return 2; if (s && w) return 60; if (s && e) return 62;
+      if (n) return 1; if (s) return 61; if (w) return 30; if (e) return 32;
+      if (oc(x - 1, y - 1)) return 34; if (oc(x + 1, y - 1)) return 33;
+      if (oc(x - 1, y + 1)) return 4; if (oc(x + 1, y + 1)) return 3;
+      return 31;
+    };
     // borda do lago (buraco d'água no tileset: 0 TL, 1 T, 2 TR / 16 L, 17 água, 18 R / 32 BL, 33 B, 34 BR)
     const pondFrame = (x, y) => {
       const n = at(x, y - 1, 1), e = at(x + 1, y, 1), s = at(x, y + 1, 1), w = at(x - 1, y, 1);
@@ -324,10 +338,32 @@ class GameScene extends Phaser.Scene {
         } else if (v === 3) {
           rt.drawFrame('cave_floor', 0, x * T, y * T);
         } else if (v === 4) {
-          rt.drawFrame('sand', 0, x * T, y * T);
+          // areia: frame do blob (foam suave voltada pro oceano)...
+          const bf = beachFrame(x, y);
+          rt.drawFrame('beach', bf, x * T, y * T);
+          // areia interior ganha variação de textura (pedriscos) pra não ficar chapada
+          if (bf === 31) {
+            const h = (x * 73856093 ^ y * 19349663) >>> 0;
+            if (h % 5 < 2) rt.drawFrame('sand_decor', h % 4, x * T, y * T);
+          }
+          // ...+ franja de grama (dirt_fringe) invadindo a areia = transição grama→areia suave
+          const gN = at(x, y - 1, 0), gS = at(x, y + 1, 0), gW = at(x - 1, y, 0), gE = at(x + 1, y, 0);
+          const gNW = at(x - 1, y - 1, 0), gNE = at(x + 1, y - 1, 0), gSW = at(x - 1, y + 1, 0), gSE = at(x + 1, y + 1, 0);
+          if (gN) rt.drawFrame('dirt_fringe', 0, x * T, y * T);
+          if (gS) rt.drawFrame('dirt_fringe', 1, x * T, y * T);
+          if (gW) rt.drawFrame('dirt_fringe', 2, x * T, y * T);
+          if (gE) rt.drawFrame('dirt_fringe', 3, x * T, y * T);
+          if (gN && gW) rt.drawFrame('dirt_fringe', 4, x * T, y * T);
+          else if (!gN && !gW && gNW) rt.drawFrame('dirt_fringe', 8, x * T, y * T);
+          if (gN && gE) rt.drawFrame('dirt_fringe', 5, x * T, y * T);
+          else if (!gN && !gE && gNE) rt.drawFrame('dirt_fringe', 9, x * T, y * T);
+          if (gS && gW) rt.drawFrame('dirt_fringe', 6, x * T, y * T);
+          else if (!gS && !gW && gSW) rt.drawFrame('dirt_fringe', 10, x * T, y * T);
+          if (gS && gE) rt.drawFrame('dirt_fringe', 7, x * T, y * T);
+          else if (!gS && !gE && gSE) rt.drawFrame('dirt_fringe', 11, x * T, y * T);
         } else if (v === 5) {
-          // oceano da praia: mesma água animada do lago, mas sem a moldura de grama
-          // do lago (aqui a borda é com areia, não faria sentido reusar o rim verde).
+          // oceano da praia: água animada do lago; a foam da borda fica no tile de AREIA
+          // vizinho (beachFrame), então aqui é só a água.
           this.waterSprites.push(this.add.sprite(x * T, y * T, 'water', 0).setOrigin(0).setDepth(-6));
         }
       }
