@@ -190,8 +190,11 @@ for name, row in ORE_ROWS.items():
 # Drops de corte/mineração no chão (walk-over, mesmo mecanismo do forrageio) — árvore/
 # arbusto/toco derrubam madeira (reaproveita o sprite de tronco já usado no forrageio
 # nativo), pedra derruba uma pedrinha pequena (sprite de mundo com sombra própria, NÃO
-# um ícone de UI — ver a lição de forage_berry/mushroom logo acima).
-load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 7 * 16, 32, 8 * 16)).save(o("forage_wood.png"))
+# um ícone de UI — ver a lição de forage_berry/mushroom logo acima). Era o tronco INTEIRO
+# de 32x16 (mesmo sprite do prop decorativo log_fallen) — ficava com cara de "objeto
+# grande no mundo", não de mini-item pra pegar. Trocado pra uma pilha pequena de lenha
+# cortada (1 tile, 16x16) — lê como "isso é um punhado pra catar", não uma tora inteira.
+load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 13 * 16, 16, 14 * 16)).save(o("forage_wood.png"))
 load(p("Outdoor decoration", "Outdoor_Decor_Animations", "Rock_Animations", "Rock_2_Anim.png")).crop((0, 0, 16, 16)).save(o("forage_stone.png"))
 
 # ---------- Praia/porto (Fase C, mundo completo) ----------

@@ -596,12 +596,17 @@ class GameScene extends Phaser.Scene {
         this.add.image(x * T, y * T, 'ladder').setOrigin(0).setDepth(y * T + 2).setTint(0xffd76a);
       }
     }
-    // Bob atrás do balcão da loja (interior 'shop')
+    // Bob atrás do balcão da loja (interior 'shop') — posição vem do objeto 'counter' de
+    // verdade (não do tile de interação, que fica na FRENTE do balcão pro jogador
+    // clicar): Bob fica um tile ATRÁS dele (mais perto da parede de fundo). Depth com
+    // bônus grande de propósito — senão o depth-sort por y competia com o balcão (que é
+    // um sprite alto, ~2 tiles) e o Bob sumia atrás dele (reportado pelo usuário).
     if (this.mapKey === 'shop') {
-      const counter = this.interactables.find(i => i.kind === 'counter');
-      if (counter) {
-        const bx = counter.at[0] * T + T / 2, by = (counter.at[1] - 1) * T + T;
-        this.bob = this.add.sprite(bx, by, 'bob').setOrigin(0.5, 0.9).setDepth(by - 2);
+      const counterKey = Object.keys(this.objectsState).find((k) => this.objectsState[k].type === 'counter');
+      if (counterKey) {
+        const [cx, cy] = counterKey.split(',').map(Number);
+        const bx = cx * T + T * 1.5, by = cy * T;
+        this.bob = this.add.sprite(bx, by, 'bob').setOrigin(0.5, 0.9).setDepth(by + 1000);
       }
     }
   }
@@ -1152,13 +1157,21 @@ class GameScene extends Phaser.Scene {
     const hereActionable = obj || (hereTile && (hereTile.crop || hereTile.tilled))
       || (this.eggsState && this.eggsState[key]) || (this.forageState && this.forageState[key]);
     if (!hereActionable && worldX !== undefined) {
-      // árvores/pedras/arbustos pelo retângulo do sprite
+      // árvores/pedras/arbustos pelo retângulo do sprite — quando MAIS de um sprite
+      // sobrepõe o ponto clicado (copa de árvore encostando numa pedra vizinha, por
+      // exemplo), pega o mais PRÓXIMO do clique, não só o primeiro da iteração (senão
+      // um clique visualmente em cima da pedra podia acabar mirando a árvore do lado).
+      let best = null, bestDist = Infinity;
       for (const [k, sprite] of this.objectSprites) {
-        if (sprite.getBounds().contains(worldX, worldY)) {
-          const [ox, oy] = k.split(',').map(Number);
-          if (this.inReach(ox, oy)) { key = k; obj = this.objectsState[k]; tx = ox; ty = oy; }
-          break;
-        }
+        const b = sprite.getBounds();
+        if (!b.contains(worldX, worldY)) continue;
+        const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+        const dist = Math.hypot(worldX - cx, worldY - cy);
+        if (dist < bestDist) { bestDist = dist; best = k; }
+      }
+      if (best) {
+        const [ox, oy] = best.split(',').map(Number);
+        if (this.inReach(ox, oy)) { key = best; obj = this.objectsState[best]; tx = ox; ty = oy; }
       }
       // cultivo cujo sprite sobe para o tile clicado → mira a raiz dele
       if (!obj) {
@@ -1188,9 +1201,15 @@ class GameScene extends Phaser.Scene {
     else me.dir = dyT > 0 ? 'down' : 'up';
 
     let type = null, extra = {};
-    if (obj && obj.type !== 'fence' && obj.type !== 'cavewall') {
+    // Lista de permissão (não de bloqueio): só árvore/arbusto/toco (corta) e pedra/
+    // minério (minera) tentam virar chop/mine — antes era "qualquer objeto que não seja
+    // fence/cavewall", uma lista de BLOQUEIO frágil que esquecia de excluir cada
+    // fixture nova (deu pra clicar na parede de pedra da Pedreira, por exemplo, e cair
+    // nesse branch por engano).
+    const choppable = obj && (obj.type === 'tree' || obj.type === 'bush' || obj.type === 'stump');
+    const mineable = obj && (obj.type === 'rock' || obj.type === 'ore');
+    if (choppable || mineable) {
       // exige a ferramenta certa: machado para madeira, picareta para pedra/minério
-      const mineable = obj.type === 'rock' || obj.type === 'ore';
       const needed = mineable ? 'pickaxe' : 'axe';
       if (!item || item.id !== needed) { this.hud.toast(t('err.wrong_tool')); return; }
       type = mineable ? 'mine' : 'chop';

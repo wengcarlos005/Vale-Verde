@@ -287,9 +287,14 @@ function generateSouth(seed) {
   rect(48, 0, 52, 14);                  // estrada da borda norte até o cruzamento
   rect(20, 12, 51, 14);                 // faixa leste-oeste — só até a beira da praia (PRAIA.x=52),
                                          // pra não cortar um pedaço de estrada dentro da areia
-  rect(23, 14, 27, SOUTH_H - 2);        // ramal oeste, agora desce até a borda sul (Pedreira)
-  ellipse(25, 20, 4, 3);                // clareira/trilha no meio do ramal
-  openEdge(ground, SOUTH_W, SOUTH_H, 23, SOUTH_H - 2, 27, SOUTH_H - 1); // sul → Pedreira
+  rect(23, 14, 27, 20);                 // ramal oeste até a clareira da mina (curto de novo —
+                                         // descer até a borda sul do mapa, 30 tiles, fazia o
+                                         // caminho até a Pedreira parecer bem mais longo do que a
+                                         // beira da praia, meio "sumido"; a saída oeste abaixo é
+                                         // bem mais curta, a trilha já tava perto da borda oeste)
+  ellipse(25, 20, 4, 3);                // clareira da mina
+  rect(0, 19, 24, 21);                  // corredor curto até a saída oeste (Pedreira)
+  openEdge(ground, SOUTH_W, SOUTH_H, 0, 19, 1, 21); // oeste → Pedreira
   paintBeach(ground, SOUTH_W, SOUTH_H, PRAIA);
 
   const objects = {};
@@ -576,12 +581,14 @@ function makeInterior(kind) {
     objects['6,2'] = { type: 'table' };          // mesa decorativa (sprite ~3 tiles, cabe em 6-8)
   } else { // shop
     // Antes reaproveitava a mesma mesa 2x lado a lado (sem cara de loja nenhuma).
-    // Agora: prateleiras de mercadoria na parede de fundo + balcão mais pro centro
-    // (jogador entra e já vê "loja"), baú decorativo do lado.
+    // Agora: prateleiras de mercadoria na parede de fundo + balcão mais perto delas
+    // (não do meio da sala) + baú decorativo do lado. Balcão subiu de y4 pra y3 —
+    // encostado perto da parede de fundo, com folga de sobra até a porta (y7) pra o
+    // aviso "Loja (E)" do balcão não brigar com o "Entrar (E)" da porta de saída.
     objects['2,2'] = { type: 'shelf' };             // prateleira de mercadoria (parede de fundo)
     objects['7,2'] = { type: 'shelf' };
-    objects['4,4'] = { type: 'counter' };            // balcão do Bob (E → abrir loja)
-    interactables.push({ at: [5, 5], kind: 'counter' });
+    objects['4,3'] = { type: 'counter' };            // balcão do Bob (E → abrir loja)
+    interactables.push({ at: [5, 4], kind: 'counter' });
     objects['8,5'] = { type: 'chest' };              // baú de mercadoria, decorativo
   }
   // porta de saída → overworld, na frente do prédio correspondente
@@ -603,10 +610,10 @@ const EDGE_LINKS = {
   ],
   south: [
     { at: [50, 0], kind: 'edge_north', to: 'overworld', toSpawn: [65, HEIGHT - 3] },
-    { at: [25, SOUTH_H - 1], kind: 'edge_south', to: 'pedreira', toSpawn: [Math.floor(PED_W / 2), 2] },
+    { at: [0, 20], kind: 'edge_west', to: 'pedreira', toSpawn: [Math.floor(PED_W / 2), 2] },
   ],
   pedreira: [
-    { at: [25, 0], kind: 'edge_north', to: 'south', toSpawn: [25, SOUTH_H - 3] },
+    { at: [25, 0], kind: 'edge_north', to: 'south', toSpawn: [2, 20] },
   ],
 };
 
