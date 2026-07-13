@@ -9,8 +9,6 @@ const WIDTH = 150;
 const HEIGHT = 80;
 const TILE = 16;
 
-const { ORE_SPAWN } = require('./crops');
-
 function mulberry32(seed) {
   return function () {
     seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
@@ -114,9 +112,6 @@ function buildingSpotFree(state, bx, by, w, h, vis, sidePad = 1) {
 const POND = { x: 44, y: 36, w: 12, h: 10 };
 const FARMLAND = { x: 8, y: 15, w: 29, h: 17 }; // área mantida livre de objetos
 const SPAWN = { x: 18, y: 12 };
-// Mina: retângulo de chão de caverna cercado por paredes-objeto; entrada no lado
-// norte, onde o ramal sul da estrada chega.
-const MINA = { x: 25, y: 60, w: 40, h: 18 };
 // Praia: areia com franja pro mar aberto (não um lago redondo) no canto sul-leste.
 const PRAIA = { x: 100, y: 60, w: 50, h: 20 };
 
@@ -166,13 +161,8 @@ function generateWorld(seed) {
   rect(43, 52, 47, 60);                 // ramal oeste até a entrada da mina
   rect(114, 52, 118, 66);               // ramal leste até a praia
 
-  // Mina: chão de caverna preenchendo o retângulo; a parede (objeto, adicionada mais
-  // abaixo) contorna por fora e abre um vão exatamente onde a estrada já chega —
-  // mesmo truque do portão da cerca da fazenda (o anel só vira parede em grama, e
-  // ali já virou estrada antes).
-  for (let y = MINA.y; y < MINA.y + MINA.h; y++)
-    for (let x = MINA.x; x < MINA.x + MINA.w; x++)
-      if (ground[y][x] === 0) ground[y][x] = 3;
+  // A mina agora é uma TELA separada (ver makeMineLevel) entrada pelo prédio
+  // mine_entrance — não tem mais caverna aberta no overworld.
 
   // Praia: areia + oceano aberto na diagonal sul-leste, chegando à borda do mapa (o mar
   // "continua" além da tela). Costa ORGÂNICA (ondulada por seno determinístico), não um
@@ -227,18 +217,6 @@ function generateWorld(seed) {
       if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'fence' };
     }
   }
-  // Parede da mina: contorna o retângulo de chão de caverna; some sozinha onde a
-  // estrada de acesso já virou chão de caverna/estrada (mesmo truque do portão acima).
-  for (let x = MINA.x - 1; x <= MINA.x + MINA.w; x++) {
-    for (const y of [MINA.y - 1, MINA.y + MINA.h]) {
-      if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'cavewall' };
-    }
-  }
-  for (let y = MINA.y - 1; y <= MINA.y + MINA.h; y++) {
-    for (const x of [MINA.x - 1, MINA.x + MINA.w]) {
-      if (ground[y][x] === 0) objects[`${x},${y}`] = { type: 'cavewall' };
-    }
-  }
   // Árvores, pedras, arbustos e tocos espalhados (contagens escaladas p/ o mapa
   // maior desde que a vila foi adicionada a leste, senão fica ralo demais lá).
   const SCATTER = [
@@ -259,18 +237,71 @@ function generateWorld(seed) {
     }
   }
 
-  // Minérios: só no chão de caverna da mina, raridade decrescente (ORE_SPAWN).
-  for (const [mineral, count] of ORE_SPAWN) {
+  // (Minério agora só existe nas telas de mina — ver makeMineLevel.)
+  return { ground, objects };
+}
+
+// ---------------- telas separadas (mina) ----------------
+// A mina é uma sequência de telas próprias (mine:1, mine:2, ...), entradas pelo prédio
+// mine_entrance no overworld. Cada nível é uma sala de caverna com escada pra descer
+// (minério mais raro/valioso quanto mais fundo) e escada/saída pra subir.
+const MINE_W = 34, MINE_H = 22;
+const MINE_UP = [3, 3];                       // escada de subir/sair (canto sup-esq)
+const MINE_DOWN = [MINE_W - 4, MINE_H - 4];   // escada de descer (canto inf-dir)
+// Tile do overworld onde o jogador reaparece ao sair da mina (logo abaixo do prédio).
+const MINE_ENTRANCE_RETURN = [45, 60];
+
+function depthOf(mapKey) { return Number(String(mapKey).split(':')[1]) || 1; }
+
+// Contagem de cada minério por profundidade: ferro some, ouro cresce quanto mais fundo.
+function mineOreCounts(depth) {
+  return [
+    ['iron', Math.max(3, 20 - depth * 3)],
+    ['copper', 8 + depth],
+    ['gold', Math.min(18, depth * 3)],
+  ];
+}
+
+function makeMineLevel(seed, depth) {
+  const rnd = mulberry32((seed ^ 0x51ede1 ^ Math.imul(depth, 2654435761)) >>> 0);
+  const w = MINE_W, h = MINE_H;
+  const ground = [];
+  for (let y = 0; y < h; y++) ground.push(new Array(w).fill(3)); // tudo chão de caverna
+  const objects = {};
+  // parede de caverna fechando a sala (colisão)
+  for (let x = 0; x < w; x++) { objects[`${x},0`] = { type: 'cavewall' }; objects[`${x},${h - 1}`] = { type: 'cavewall' }; }
+  for (let y = 0; y < h; y++) { objects[`0,${y}`] = { type: 'cavewall' }; objects[`${w - 1},${y}`] = { type: 'cavewall' }; }
+  // minério espalhado (evita as escadas e mantém 1 tile de folga entre depósitos)
+  const scatterState = { objects };
+  const reserved = (x, y) =>
+    (Math.abs(x - MINE_UP[0]) <= 1 && Math.abs(y - MINE_UP[1]) <= 1) ||
+    (Math.abs(x - MINE_DOWN[0]) <= 1 && Math.abs(y - MINE_DOWN[1]) <= 1);
+  for (const [mineral, count] of mineOreCounts(depth)) {
     let placed = 0, tries = 0;
-    while (placed < count && tries++ < 1000) {
-      const x = MINA.x + Math.floor(rnd() * MINA.w);
-      const y = MINA.y + Math.floor(rnd() * MINA.h);
-      if (ground[y][x] !== 3 || hasNearbyContent(scatterState, x, y)) continue;
+    while (placed < count && tries++ < 900) {
+      const x = 2 + Math.floor(rnd() * (w - 4)), y = 2 + Math.floor(rnd() * (h - 4));
+      if (objects[`${x},${y}`] || reserved(x, y) || hasNearbyContent(scatterState, x, y)) continue;
       objects[`${x},${y}`] = { type: 'ore', mineral, hp: 3 };
       placed++;
     }
   }
-  return { ground, objects };
+  const entrances = [
+    { at: MINE_UP, kind: 'ladder_up', to: depth === 1 ? 'overworld' : `mine:${depth - 1}`,
+      toSpawn: depth === 1 ? MINE_ENTRANCE_RETURN : [MINE_DOWN[0], MINE_DOWN[1] - 1] },
+    { at: MINE_DOWN, kind: 'ladder_down', to: `mine:${depth + 1}`, toSpawn: [MINE_UP[0], MINE_UP[1] + 1] },
+  ];
+  return { ground, objects, entrances, w, h, spawn: [MINE_UP[0], MINE_UP[1] + 1] };
+}
+
+// Entradas do overworld (prédios que levam a outras telas). O prédio dá o tile de
+// interação (base central); house/shop entram na próxima leva.
+function overworldEntrances() {
+  const ents = [];
+  const mine = BUILDINGS.find(b => b.type === 'mine_entrance');
+  if (mine) {
+    ents.push({ at: [mine.x + Math.floor(mine.w / 2), mine.y + mine.h - 1], kind: 'mine', to: 'mine:1', toSpawn: [MINE_UP[0], MINE_UP[1] + 1] });
+  }
+  return ents;
 }
 
 function initialFarmState(seed) {
@@ -292,6 +323,7 @@ function initialFarmState(seed) {
     buildings: [],           // [{id, type, x, y}] prédios construídos pelo jogador
     nextBuildingId: 1,
     forage: {},              // "x,y" -> {type} itens para forragear (berry/mushroom/log)
+    maps: {},                // "mine:N" -> {objects} (estado mutável das telas de mina)
   };
   scatterForage(state, 25, mulberry32(seed ^ 0x9e37));
   return state;
@@ -316,7 +348,7 @@ function scatterForage(state, n, rnd = Math.random) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, MINA, PRAIA,
+  WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA, MINE_W, MINE_H,
   generateWorld, initialFarmState, inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
-  inPlayerBuildingOrYard, hasNearbyContent,
+  inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, overworldEntrances, depthOf,
 };

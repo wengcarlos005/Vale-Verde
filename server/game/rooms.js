@@ -39,8 +39,11 @@ class Room {
     for (const key of Object.keys(this.state.objects)) {
       const [x, y] = key.split(',').map(Number);
       const obj = this.state.objects[key];
-      const validGround = this.state.ground[y][x] === (obj.type === 'ore' ? 3 : 0);
-      if (W.inBuildingVisual(x, y) || !validGround) delete this.state.objects[key];
+      // cavewall/ore não existem mais no overworld (a mina virou tela separada) —
+      // limpa o entulho da caverna aberta antiga; o resto (árvore/pedra/cerca) só em grama.
+      const validGround = this.state.ground[y] && this.state.ground[y][x] === 0;
+      const validType = obj.type !== 'cavewall' && obj.type !== 'ore';
+      if (W.inBuildingVisual(x, y) || !validGround || !validType) delete this.state.objects[key];
     }
     for (const key of Object.keys(this.state.tiles)) {
       const [x, y] = key.split(',').map(Number);
@@ -60,6 +63,7 @@ class Room {
     if (!this.state.nextBuildingId) this.state.nextBuildingId = 1;
     if (!this.state.forage) { this.state.forage = {}; W.scatterForage(this.state, 25); }
     if (!this.state.quest) this.state.quest = pickQuest();
+    if (!this.state.maps) this.state.maps = {}; // estado mutável das telas de mina
     // migração: mapa cresceu (vila a leste, depois mina/praia/Porto Vale ao sul e mais
     // a leste) — fazendas salvas antes disso têm a área nova vazia (o SCATTER original
     // só roda uma vez, na criação da fazenda). Densidade proporcional à área nova.
@@ -75,7 +79,67 @@ class Room {
   }
 
   // ---------- helpers ----------
+  // emit = farm-wide (chat, relógio, dinheiro, dia, missões — todos veem de qualquer tela).
   emit(ev, data) { this.io.to(this.channel).emit(ev, data); }
+  // emitMap = só quem está na MESMA tela (movimento, objetos, tiles).
+  mapChannel(mapKey) { return `${this.channel}:${mapKey}`; }
+  emitMap(mapKey, ev, data) { this.io.to(this.mapChannel(mapKey)).emit(ev, data); }
+  playersOnMap(mapKey) { return [...this.players.values()].filter(q => (q.map || 'overworld') === mapKey); }
+
+  // Contêineres mutáveis (ground/objects/tiles/forage/eggs) do mapa. Overworld = campos
+  // top-level do estado; mina = gerada sob demanda, objetos (minério) persistidos em
+  // state.maps. Só ground/objects/tiles/forage/eggs são por-mapa; dinheiro/dia/prédios/
+  // animais/inventários são globais da fazenda.
+  mapOf(mapKey) {
+    if (!mapKey || mapKey === 'overworld') {
+      if (!this._owEntrances) this._owEntrances = W.overworldEntrances();
+      return {
+        key: 'overworld',
+        ground: this.state.ground, objects: this.state.objects, tiles: this.state.tiles,
+        forage: this.state.forage, eggs: this.state.eggs,
+        w: W.WIDTH, h: W.HEIGHT, entrances: this._owEntrances, spawn: W.SPAWN,
+      };
+    }
+    if (!this._maps) this._maps = {};
+    if (!this._maps[mapKey]) {
+      const gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey));
+      if (!this.state.maps) this.state.maps = {};
+      if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects };
+      this._maps[mapKey] = {
+        key: mapKey,
+        ground: gen.ground, objects: this.state.maps[mapKey].objects, tiles: {}, forage: {}, eggs: {},
+        w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn,
+      };
+    }
+    return this._maps[mapKey];
+  }
+
+  // Payload no formato do 'joined' pra um jogador, do mapa em que ele está agora.
+  mapPayload(p) {
+    const m = this.mapOf(p.map);
+    const s = this.state;
+    const isOw = m.key === 'overworld';
+    return {
+      farm: { id: this.farmId, code: this.code, name: this.name },
+      map: m.key,
+      world: {
+        width: m.w, height: m.h, tile: W.TILE,
+        ground: m.ground, buildings: isOw ? W.BUILDINGS : [], spawn: m.spawn,
+        buildingDefs: W.BUILDING_DEFS,
+        entrances: m.entrances.map(e => ({ at: e.at, kind: e.kind })),
+      },
+      state: {
+        day: s.day, season: s.season, year: s.year, time: s.time, money: s.money,
+        tiles: m.tiles, objects: m.objects, bin: s.bin,
+        animals: isOw ? s.animals : [], eggs: m.eggs, buildings: isOw ? s.buildings : [],
+        forage: m.forage, quest: s.quest,
+      },
+      crops: CROPS,
+      recipes: RECIPES,
+      you: { userId: p.userId, inv: this.inv(p.userId) },
+      players: this.playersOnMap(m.key).map(q => this.publicPlayer(q)),
+    };
+  }
 
   playerByUser(userId) {
     for (const p of this.players.values()) if (p.userId === userId) return p;
@@ -116,33 +180,36 @@ class Room {
     const player = {
       socketId: socket.id, userId: user.id, name: user.name,
       x: spawnPx.x, y: spawnPx.y, dir: 'down', anim: 'idle',
-      appearance: appearance || {}, sleeping: false,
+      appearance: appearance || {}, sleeping: false, map: 'overworld',
     };
     this.players.set(socket.id, player);
-    socket.join(this.channel);
-    const inv = this.inv(user.id);
+    socket.join(this.channel);                       // farm-wide (chat/global)
+    socket.join(this.mapChannel('overworld'));       // canal do mapa
+    this.inv(user.id);
     this.dirty = true;
+    socket.emit('joined', this.mapPayload(player));
+    socket.to(this.mapChannel('overworld')).emit('playerJoined', this.publicPlayer(player));
+  }
 
-    socket.emit('joined', {
-      farm: { id: this.farmId, code: this.code, name: this.name },
-      world: {
-        width: W.WIDTH, height: W.HEIGHT, tile: W.TILE,
-        ground: this.state.ground, buildings: W.BUILDINGS, spawn: W.SPAWN,
-        buildingDefs: W.BUILDING_DEFS,
-      },
-      state: {
-        day: this.state.day, season: this.state.season, year: this.state.year,
-        time: this.state.time, money: this.state.money,
-        tiles: this.state.tiles, objects: this.state.objects, bin: this.state.bin,
-        animals: this.state.animals, eggs: this.state.eggs, buildings: this.state.buildings,
-        forage: this.state.forage, quest: this.state.quest,
-      },
-      crops: CROPS,
-      recipes: RECIPES,
-      you: { userId: user.id, inv },
-      players: [...this.players.values()].map(p => this.publicPlayer(p)),
-    });
-    socket.to(this.channel).emit('playerJoined', this.publicPlayer(player));
+  // Trocar de tela por uma entrada (entrada da mina, escadas, portas). Valida que o
+  // jogador está no tile de uma `entrance` do mapa atual e o move pra tela alvo.
+  enterMap(socket) {
+    const p = this.players.get(socket.id);
+    if (!p) return;
+    const cur = this.mapOf(p.map);
+    const px = Math.round(p.x / W.TILE), py = Math.round(p.y / W.TILE);
+    const ent = cur.entrances.find(e => Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1);
+    if (!ent) return;
+    socket.leave(this.mapChannel(p.map));
+    socket.to(this.mapChannel(p.map)).emit('playerLeft', { userId: p.userId });
+    p.map = ent.to;
+    p.x = ent.toSpawn[0] * W.TILE; p.y = ent.toSpawn[1] * W.TILE;
+    p.dir = 'down'; p.anim = 'idle'; p.sleeping = false;
+    socket.join(this.mapChannel(p.map));
+    socket.emit('joined', this.mapPayload(p));
+    socket.to(this.mapChannel(p.map)).emit('playerJoined', this.publicPlayer(p));
+    this.checkAllSleeping();
+    this.dirty = true;
   }
 
   publicPlayer(p) {
@@ -154,7 +221,8 @@ class Room {
     if (!p) return;
     this.players.delete(socket.id);
     socket.leave(this.channel);
-    this.emit('playerLeft', { userId: p.userId });
+    socket.leave(this.mapChannel(p.map));
+    this.emitMap(p.map, 'playerLeft', { userId: p.userId });
     this.checkAllSleeping(); // quem saiu não bloqueia a noite
     if (this.players.size === 0) this.save();
   }
@@ -245,11 +313,14 @@ class Room {
     }
 
     this.save();
+    // resumo/calendário/dinheiro é global (todos veem, de qualquer tela)...
     this.emit('dayEnded', {
       payout, soldItems, passedOut,
       day: s.day, season: s.season, year: s.year, time: s.time, money: s.money,
-      tiles: s.tiles, objects: s.objects, eggs: s.eggs, forage: s.forage,
     });
+    // ...mas a atualização do MUNDO (tiles/objetos/ovos/forrageio) é só do overworld —
+    // quem está na mina não deve receber (senão o cliente aplicaria no cenário errado).
+    this.emitMap('overworld', 'mapRefresh', { tiles: s.tiles, objects: s.objects, eggs: s.eggs, forage: s.forage });
     for (const p of this.players.values()) {
       this.io.to(p.socketId).emit('inv', this.inv(p.userId));
     }
@@ -289,11 +360,12 @@ class Room {
   onMove(socket, data) {
     const p = this.players.get(socket.id);
     if (!p || typeof data.x !== 'number' || typeof data.y !== 'number') return;
-    p.x = Math.max(0, Math.min(W.WIDTH * W.TILE, data.x));
-    p.y = Math.max(0, Math.min(W.HEIGHT * W.TILE, data.y));
+    const m = this.mapOf(p.map);
+    p.x = Math.max(0, Math.min(m.w * W.TILE, data.x));
+    p.y = Math.max(0, Math.min(m.h * W.TILE, data.y));
     p.dir = data.dir || p.dir;
     p.anim = data.anim || 'idle';
-    socket.to(this.channel).emit('playerMoved', { userId: p.userId, x: p.x, y: p.y, dir: p.dir, anim: p.anim });
+    socket.to(this.mapChannel(p.map)).emit('playerMoved', { userId: p.userId, x: p.x, y: p.y, dir: p.dir, anim: p.anim });
   }
 
   onChat(socket, text) {
@@ -308,33 +380,35 @@ class Room {
     if (!p || !data) return;
     const { type } = data;
     const x = Math.floor(data.x), y = Math.floor(data.y);
-    if (!this.inBounds(x, y) || !this.near(p, x, y)) return;
+    const m = this.mapOf(p.map);
+    if (x < 0 || y < 0 || x >= m.w || y >= m.h || !this.near(p, x, y)) return;
     const key = `${x},${y}`;
-    const s = this.state;
     const inv = this.inv(p.userId);
-    const ground = s.ground[y][x];
-    const tile = s.tiles[key];
-    const obj = s.objects[key];
+    const ground = m.ground[y][x];
+    const tile = m.tiles[key];
+    const obj = m.objects[key];
+    const patch = (k) => { this.dirty = true; this.emitMap(p.map, 'tile', { key: k, tile: m.tiles[k] || null }); };
+    const onOverworld = p.map === 'overworld';
 
     if (type === 'collect') {
       // ovo ou forrageável (fruta/cogumelo/lenha) — sem ferramenta nem energia
-      if (s.eggs[key]) {
-        delete s.eggs[key];
+      if (m.eggs[key]) {
+        delete m.eggs[key];
         this.addItem(inv, 'egg', 1);
-        this.emit('egg', { key, egg: null });
-      } else if (s.forage[key]) {
-        const def = FORAGE[s.forage[key].type];
-        delete s.forage[key];
+        this.emitMap(p.map, 'egg', { key, egg: null });
+      } else if (m.forage[key]) {
+        const def = FORAGE[m.forage[key].type];
+        delete m.forage[key];
         if (def) this.addItem(inv, def.give, def.qty);
-        this.emit('forage', { key, item: null });
+        this.emitMap(p.map, 'forage', { key, item: null });
       } else return;
       this.dirty = true;
       socket.emit('inv', inv);
     } else if (type === 'till') {
-      if (ground !== 0 || obj || this.isBuildingTile(x, y) || (tile && tile.tilled)) return;
+      if (!onOverworld || ground !== 0 || obj || this.isBuildingTile(x, y) || (tile && tile.tilled)) return;
       if (!this.spend(inv, COST.till, socket)) return;
-      s.tiles[key] = { tilled: true, watered: false, crop: null };
-      this.patchTile(key);
+      m.tiles[key] = { tilled: true, watered: false, crop: null };
+      patch(key);
     } else if (type === 'water') {
       if (ground === 1) { // regar a água = encher o regador
         inv.can.level = inv.can.max;
@@ -347,32 +421,32 @@ class Room {
       if (!this.spend(inv, COST.water, socket)) return;
       inv.can.level--;
       tile.watered = true;
-      this.patchTile(key);
+      patch(key);
       socket.emit('inv', inv);
     } else if (type === 'plant') {
       const cropId = data.crop;
       const def = CROPS[cropId];
       if (!def || !tile || !tile.tilled || tile.crop) return;
-      if (def.season !== s.season) { socket.emit('err', { code: 'wrong_season' }); return; }
+      if (def.season !== this.state.season) { socket.emit('err', { code: 'wrong_season' }); return; }
       const seedId = `seed_${cropId}`;
       if (!inv.items[seedId]) { socket.emit('err', { code: 'no_seeds' }); return; }
       if (!this.spend(inv, COST.plant, socket)) return;
       this.addItem(inv, seedId, -1);
       tile.crop = { id: cropId, daysGrown: 0 };
-      this.patchTile(key);
+      patch(key);
       socket.emit('inv', inv);
     } else if (type === 'harvest') {
       if (!tile || !tile.crop) return;
       if (tile.crop.dead) { // limpar cultivo morto
         tile.crop = null;
-        this.patchTile(key);
+        patch(key);
         return;
       }
       if (stageOf(tile.crop.id, tile.crop.daysGrown) !== 4) return;
       if (!this.spend(inv, COST.harvest, socket)) return;
       this.addItem(inv, tile.crop.id, 1);
       tile.crop = null;
-      this.patchTile(key);
+      patch(key);
       socket.emit('inv', inv);
     } else if (type === 'chop' || type === 'mine') {
       if (!obj) return;
@@ -382,35 +456,30 @@ class Room {
       if (!this.spend(inv, COST[type], socket)) return;
       obj.hp--;
       if (obj.hp <= 0) {
-        delete s.objects[key];
+        delete m.objects[key];
         const drop = obj.type === 'rock' ? ['stone', 3]
           : obj.type === 'ore' ? [obj.mineral, 2]
           : ['wood', obj.type === 'tree' ? 3 : 1];
         this.addItem(inv, drop[0], drop[1]);
-        this.emit('object', { key, obj: null });
+        this.emitMap(p.map, 'object', { key, obj: null });
         socket.emit('inv', inv);
       } else {
-        this.emit('object', { key, obj });
+        this.emitMap(p.map, 'object', { key, obj });
       }
       this.dirty = true;
     } else if (type === 'place') {
-      // colocar um item fabricado no mundo (por ora só cerca)
+      // colocar um item fabricado no mundo (por ora só cerca) — só no overworld
       const itemId = String(data.item || '');
-      if (itemId !== 'fence') return;
+      if (!onOverworld || itemId !== 'fence') return;
       if (ground !== 0 || obj || tile || this.isBuildingTile(x, y)) return;
       if (!inv.items.fence) return;
       if (!this.spend(inv, COST.place, socket)) return;
       this.addItem(inv, 'fence', -1);
-      s.objects[key] = { type: 'fence' };
-      this.emit('object', { key, obj: s.objects[key] });
+      m.objects[key] = { type: 'fence' };
+      this.emitMap(p.map, 'object', { key, obj: m.objects[key] });
       socket.emit('inv', inv);
       this.dirty = true;
     }
-  }
-
-  patchTile(key) {
-    this.dirty = true;
-    this.emit('tile', { key, tile: this.state.tiles[key] || null });
   }
 
   onBuy(socket, data) {
@@ -432,7 +501,7 @@ class Room {
 
   onBuyAnimal(socket) {
     const p = this.players.get(socket.id);
-    if (!p) return;
+    if (!p || p.map !== 'overworld') return;
     const s = this.state;
     const coops = this.coops();
     if (!coops.length) { socket.emit('err', { code: 'need_coop' }); return; }
@@ -448,13 +517,13 @@ class Room {
     s.animals.push(animal);
     this.dirty = true;
     this.emit('money', { money: s.money });
-    this.emit('animals', { animals: s.animals });
+    this.emitMap('overworld', 'animals', { animals: s.animals });
   }
 
   // Construir um prédio: valida materiais e posição, desconta, adiciona ao estado.
   onBuild(socket, data) {
     const p = this.players.get(socket.id);
-    if (!p || !data) return;
+    if (!p || !data || p.map !== 'overworld') return;
     const s = this.state;
     const def = W.BUILDING_DEFS[String(data.type || '')];
     if (!def) return;
@@ -489,7 +558,7 @@ class Room {
     const b = { id: s.nextBuildingId++, type: data.type, x: bx, y: by, w: def.w, h: def.h, vis };
     s.buildings.push(b);
     this.dirty = true;
-    this.emit('building', { building: b });
+    this.emitMap('overworld', 'building', { building: b });
     this.emit('money', { money: s.money });
     socket.emit('inv', inv);
   }
@@ -497,7 +566,7 @@ class Room {
   // Fabricar na bancada: consome materiais e dá o item pronto (por ora só cerca).
   onCraft(socket, data) {
     const p = this.players.get(socket.id);
-    if (!p || !data) return;
+    if (!p || !data || p.map !== 'overworld') return;
     const def = RECIPES[String(data.recipe || '')];
     if (!def) return;
     if (!W.BUILDINGS.some(b => b.type === 'bench' && this.near(p, b.x, b.y))) {
@@ -518,7 +587,7 @@ class Room {
   // Entregar o pedido do quadro de recados: dá a recompensa e sorteia o próximo.
   onDeliverQuest(socket) {
     const p = this.players.get(socket.id);
-    if (!p) return;
+    if (!p || p.map !== 'overworld') return;
     const s = this.state;
     const q = s.quest;
     if (!q) return;
@@ -586,7 +655,7 @@ class Room {
     if (!p) return;
     p.appearance = appearance || {};
     stmts.setAppearance.run(JSON.stringify(p.appearance), this.farmId, p.userId);
-    socket.to(this.channel).emit('playerAppearance', { userId: p.userId, appearance: p.appearance });
+    socket.to(this.mapChannel(p.map)).emit('playerAppearance', { userId: p.userId, appearance: p.appearance });
   }
 }
 

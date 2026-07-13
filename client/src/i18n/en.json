@@ -136,5 +136,8 @@
   "interact.shop": "Shop (E)",
   "interact.bin": "Sell (E)",
   "interact.bench": "Craft (E)",
-  "interact.board": "View request (E)"
+  "interact.board": "View request (E)",
+  "interact.enter": "Enter (E)",
+  "interact.up": "Go up (E)",
+  "interact.down": "Go down (E)"
 }

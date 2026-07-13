@@ -54,7 +54,10 @@ export function startGame(farm) {
   const socket = connect(farm.id);
   socket.on('connect_error', (e) => { console.error('[greenvale] connect_error', e.message); loading(8, 'loading.connecting'); });
   socket.io.on('reconnect_attempt', () => loading(8, 'loading.connecting'));
-  socket.once('joined', (data) => {
+  // 'joined' chega no login E a cada troca de tela (overworld ↔ mina/interior). Toda vez
+  // reconstrói a cena com o novo mapa — a tela de carregamento cobre, e como as texturas
+  // ficam em cache o reload é rápido.
+  socket.on('joined', (data) => {
     window.gvBoot = 'joined';
     loading(20, 'loading.assets');
     if (game) { game.destroy(true); game = null; }
@@ -70,6 +73,14 @@ export function startGame(farm) {
     window.gvGame = game;
   });
 }
+
+// Eventos de jogo que a cena registra — removidos antes de re-registrar em cada rebuild
+// (troca de tela), senão os handlers da cena antiga ficariam duplicados no socket.
+const GAME_EVENTS = [
+  'playerJoined', 'playerLeft', 'playerMoved', 'playerAppearance', 'chat', 'tile', 'object',
+  'egg', 'forage', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
+  'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect',
+];
 
 class GameScene extends Phaser.Scene {
   constructor(socket, data) {
@@ -104,6 +115,7 @@ class GameScene extends Phaser.Scene {
     L.spritesheet('sand_decor', '/assets/sand_decor.png', { frameWidth: T, frameHeight: T });
     L.image('cavewall', '/assets/cavewall.png');
     L.image('mine_entrance', '/assets/mine_entrance.png');
+    L.image('ladder', '/assets/ladder.png');
     for (const m of ['iron', 'copper', 'gold']) L.image(`ore_${m}`, `/assets/ore_${m}.png`);
     L.image('city_hall', '/assets/city_hall.png');
     L.image('city_house', '/assets/city_house.png');
@@ -160,6 +172,8 @@ class GameScene extends Phaser.Scene {
     window.gvBoot = 'create';
     const d = this.data0;
     this.world = d.world;
+    this.mapKey = d.map || 'overworld';
+    this.entrances = d.world.entrances || [];
     this.crops = d.crops;
     this.recipes = d.recipes || {};
     this.tilesState = d.state.tiles;
@@ -209,8 +223,11 @@ class GameScene extends Phaser.Scene {
     }
 
     this.buildGround();
-    this.buildDecor();
+    // decoração (tufos, borboletas, props) é coisa de overworld; mina/interior não têm.
+    if (this.mapKey === 'overworld') this.buildDecor();
+    else { this.propBlockers = new Set(); this.butterflies = []; }
     this.buildBuildings();
+    this.buildEntrances();
     for (const [key, obj] of Object.entries(this.objectsState)) this.spawnObject(key, obj);
     for (const [key, tile] of Object.entries(this.tilesState)) this.updateTile(key, tile);
 
@@ -226,7 +243,7 @@ class GameScene extends Phaser.Scene {
     for (const [key, f] of Object.entries(this.forageState)) this.setForage(key, f);
 
     this.waterSprites.forEach(s => s.play({ key: 'water_flow', startFrame: Phaser.Math.Between(0, 7) }));
-    this.bob.play('bob_idle');
+    if (this.bob) this.bob.play('bob_idle');
 
     // jogadores
     for (const p of d.players) this.addPlayer(p);
@@ -489,14 +506,28 @@ class GameScene extends Phaser.Scene {
         this.doors.board = { x: b.x, y: b.y + b.h };
       }
     }
+    this.npcBlockers = new Set();
     const shop = this.world.buildings.find(b => b.type === 'shop');
-    const bobX = (shop.x + shop.w) * T - 8, bobY = (shop.y + shop.h) * T + 14;
-    this.bob = this.add.sprite(bobX, bobY, 'bob').setOrigin(0.5, 0.8).setDepth(bobY);
-    this.npcBlockers = new Set([`${Math.floor(bobX / T)},${Math.floor(bobY / T)}`]);
+    if (shop) { // Bob só existe no overworld (mina/interior não têm a loja)
+      const bobX = (shop.x + shop.w) * T - 8, bobY = (shop.y + shop.h) * T + 14;
+      this.bob = this.add.sprite(bobX, bobY, 'bob').setOrigin(0.5, 0.8).setDepth(bobY);
+      this.npcBlockers.add(`${Math.floor(bobX / T)},${Math.floor(bobY / T)}`);
+    }
 
     // prédios construídos pelo jogador
     this.placedBuildings = new Map(); // id -> {sprite, b}
     for (const b of this.buildingsState) this.addBuilding(b);
+  }
+
+  // Escadas/entradas do mapa: sprite de escada nas telas de mina (a entrada da mina no
+  // overworld já é o prédio mine_entrance). Registra os tiles pra interação (E → trocar).
+  buildEntrances() {
+    for (const e of this.entrances) {
+      if (e.kind === 'ladder_up' || e.kind === 'ladder_down') {
+        const [x, y] = e.at;
+        this.add.image(x * T, y * T, 'ladder').setOrigin(0).setDepth(y * T + 2);
+      }
+    }
   }
 
   addBuilding(b) {
@@ -1037,6 +1068,10 @@ class GameScene extends Phaser.Scene {
   tryInteract() {
     const me = this.players.get(this.me);
     const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
+    // entrada de tela (mina/escada/porta) tem prioridade
+    for (const e of this.entrances) {
+      if (Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1) { this.socket.emit('enterMap'); return; }
+    }
     const near = (d) => d && Math.abs(px - d.x) <= 1 && Math.abs(py - d.y) <= 1;
     if (near(this.doors.shop)) this.hud.openShop();
     else if (near(this.doors.bin)) this.hud.openBin();
@@ -1048,6 +1083,7 @@ class GameScene extends Phaser.Scene {
   // ---------------- rede ----------------
   bindSocket() {
     const s = this.socket;
+    GAME_EVENTS.forEach(ev => s.off(ev)); // evita handlers duplicados ao trocar de tela
     s.on('playerJoined', (p) => { this.addPlayer(p); this.hud.addChat('☀', `${p.name} ➜`); });
     s.on('playerLeft', ({ userId }) => this.removePlayer(userId));
     s.on('playerMoved', (m) => {
@@ -1096,14 +1132,17 @@ class GameScene extends Phaser.Scene {
       else if (overlayOpen) this.hud.showSleep(waiting);
     });
     s.on('dayEnded', (d) => {
+      // só resumo/relógio/dinheiro (o mundo em si vem no 'mapRefresh', só pra quem está no overworld)
       this.serverTime = d.time; this.serverTimeAt = performance.now();
       this.hud.setTime(d);
       this.hud.setMoney(d.money);
       this.hud.setBin([]);
+      this.hud.showDaySummary(d);
+    });
+    s.on('mapRefresh', (d) => {
       this.rebuildAll(d.tiles, d.objects);
       if (d.eggs) this.setEggs(d.eggs);
       if (d.forage) this.setForageAll(d.forage);
-      this.hud.showDaySummary(d);
     });
     s.on('disconnect', () => this.hud.toast(t('err.network')));
   }
@@ -1175,7 +1214,13 @@ class GameScene extends Phaser.Scene {
     // dica de interação
     const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
     let hint = null;
-    for (const [type, d] of Object.entries(this.doors)) {
+    for (const e of this.entrances) {
+      if (Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1) {
+        hint = t(`interact.${e.kind === 'ladder_up' ? 'up' : e.kind === 'ladder_down' ? 'down' : 'enter'}`);
+        break;
+      }
+    }
+    if (!hint) for (const [type, d] of Object.entries(this.doors)) {
       if (Math.abs(px - d.x) <= 1 && Math.abs(py - d.y) <= 1) {
         hint = t(`interact.${type === 'house' ? 'sleep' : type}`);
         break;

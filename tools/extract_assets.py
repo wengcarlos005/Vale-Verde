@@ -157,6 +157,7 @@ load(p("Tiles", "Cave", "Cave_Walls.png")).crop((16, 96, 32, 128)).save(o("cavew
 load(p("Tiles", "Beach", "Beach_Tiles.png")).save(o("beach.png"))  # 480x48, spritesheet 16px
 load(p("Tiles", "Beach", "Beach_Decor_Tiles.png")).save(o("sand_decor.png"))  # 32x32 = 4 variantes de areia com textura/pedriscos
 load(p("Tiles", "Cliff", "Stone_Cliff_1_Cave_Entrance.png")).save(o("mine_entrance.png"))  # arco esculpido na rocha, 48x48, decorativo (sem colisão)
+load(p("Tiles", "Cave", "Cave_Floor_Ladder.png")).save(o("ladder.png"))  # escada da mina (subir/descer nível), 16x16
 
 # Minérios: linha = mineral (0 ferro, 1 cobre, 2 ouro), coluna 3 = estágio com o
 # minério bem exposto/colorido (colunas 0-2 são quase só pedra cinza, pouco legíveis).
