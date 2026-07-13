@@ -116,6 +116,10 @@ class GameScene extends Phaser.Scene {
     L.image('cavewall', '/assets/cavewall.png');
     L.image('mine_entrance', '/assets/mine_entrance.png');
     L.image('ladder', '/assets/ladder.png');
+    L.image('interior_floor', '/assets/interior_floor.png');
+    L.image('interior_wall', '/assets/interior_wall.png');
+    L.image('bed', '/assets/bed.png');
+    L.image('table', '/assets/table.png');
     for (const m of ['iron', 'copper', 'gold']) L.image(`ore_${m}`, `/assets/ore_${m}.png`);
     L.image('city_hall', '/assets/city_hall.png');
     L.image('city_house', '/assets/city_house.png');
@@ -174,6 +178,7 @@ class GameScene extends Phaser.Scene {
     this.world = d.world;
     this.mapKey = d.map || 'overworld';
     this.entrances = d.world.entrances || [];
+    this.interactables = d.world.interactables || [];
     this.crops = d.crops;
     this.recipes = d.recipes || {};
     this.tilesState = d.state.tiles;
@@ -354,6 +359,8 @@ class GameScene extends Phaser.Scene {
           if (f !== 17) rimRt.drawFrame('gtiles', f, x * T, y * T);
         } else if (v === 3) {
           rt.drawFrame('cave_floor', 0, x * T, y * T);
+        } else if (v === 6) {
+          rt.drawFrame('interior_floor', 0, x * T, y * T);
         } else if (v === 4) {
           // areia: frame do blob (foam suave voltada pro oceano)...
           const bf = beachFrame(x, y);
@@ -497,8 +504,9 @@ class GameScene extends Phaser.Scene {
       else if (b.type === 'city_hall') this.add.image(bx, by, 'city_hall').setOrigin(0, 1).setDepth(depth);
       else if (b.type === 'city_house') this.add.image(bx, by, 'city_house').setOrigin(0, 1).setDepth(depth);
       else if (b.type === 'mine_entrance') this.add.image(bx, by, 'mine_entrance').setOrigin(0, 1).setDepth(depth);
-      // só portas interativas geram dica/atalho E
-      if (b.door && ['house', 'shop', 'bin'].includes(b.type)) {
+      // casa/loja agora são ENTRADAS (viram tela de interior); só a caixa de venda
+      // (bin) e bancada/quadro continuam como interação in-loco no overworld.
+      if (b.door && b.type === 'bin') {
         this.doors[b.type] = { x: b.door[0], y: b.door[1] + 1 };
       } else if (b.type === 'bench') {
         this.doors.bench = { x: b.x, y: b.y + b.h };
@@ -526,6 +534,14 @@ class GameScene extends Phaser.Scene {
       if (e.kind === 'ladder_up' || e.kind === 'ladder_down') {
         const [x, y] = e.at;
         this.add.image(x * T, y * T, 'ladder').setOrigin(0).setDepth(y * T + 2);
+      }
+    }
+    // Bob atrás do balcão da loja (interior 'shop')
+    if (this.mapKey === 'shop') {
+      const counter = this.interactables.find(i => i.kind === 'counter');
+      if (counter) {
+        const bx = counter.at[0] * T + T / 2, by = (counter.at[1] - 1) * T + T;
+        this.bob = this.add.sprite(bx, by, 'bob').setOrigin(0.5, 0.9).setDepth(by - 2);
       }
     }
   }
@@ -629,6 +645,12 @@ class GameScene extends Phaser.Scene {
       sprite = this.add.image(cx, by, 'cavewall').setOrigin(0.5, 1).setDepth(by);
     } else if (obj.type === 'ore') {
       sprite = this.add.image(cx, by, `ore_${obj.mineral}`).setOrigin(0.5, 1).setDepth(by);
+    } else if (obj.type === 'wall') {
+      sprite = this.add.image(x * T, y * T, 'interior_wall').setOrigin(0).setDepth(by);
+    } else if (obj.type === 'bed') {
+      sprite = this.add.image(x * T, by, 'bed').setOrigin(0, 1).setDepth(by); // sprite 32x32 (2 tiles)
+    } else if (obj.type === 'table' || obj.type === 'counter') {
+      sprite = this.add.image(x * T, by, 'table').setOrigin(0, 1).setDepth(by);
     } else {
       sprite = this.add.image(cx, by, 'stump').setOrigin(0.5, 1).setDepth(by);
     }
@@ -915,6 +937,8 @@ class GameScene extends Phaser.Scene {
   enterBuildMode(type) {
     const def = this.buildingDefs[type];
     if (!def) return;
+    // só dá pra construir no overworld (prédios ficam na fazenda, não dentro da loja)
+    if (this.mapKey !== 'overworld') { this.hud.toast(t('build.outside')); this.hud.closeModals(); return; }
     this.hud.closeModals();
     this.cancelBuild();
     const ghost = this.add.image(0, 0, type).setOrigin(0, 1).setAlpha(0.7).setDepth(100000);
@@ -1072,12 +1096,18 @@ class GameScene extends Phaser.Scene {
     for (const e of this.entrances) {
       if (Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1) { this.socket.emit('enterMap'); return; }
     }
+    // móveis interativos de interior (cama = dormir, balcão = loja)
+    for (const it of this.interactables) {
+      if (Math.abs(px - it.at[0]) <= 1 && Math.abs(py - it.at[1]) <= 1) {
+        if (it.kind === 'bed') { this.socket.emit('sleep', true); this.hud.showSleep([]); }
+        else if (it.kind === 'counter') this.hud.openShop();
+        return;
+      }
+    }
     const near = (d) => d && Math.abs(px - d.x) <= 1 && Math.abs(py - d.y) <= 1;
-    if (near(this.doors.shop)) this.hud.openShop();
-    else if (near(this.doors.bin)) this.hud.openBin();
+    if (near(this.doors.bin)) this.hud.openBin();
     else if (near(this.doors.bench)) this.hud.openCraft();
     else if (near(this.doors.board)) this.hud.openQuest();
-    else if (near(this.doors.house)) { this.socket.emit('sleep', true); this.hud.showSleep([]); }
   }
 
   // ---------------- rede ----------------
@@ -1217,6 +1247,12 @@ class GameScene extends Phaser.Scene {
     for (const e of this.entrances) {
       if (Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1) {
         hint = t(`interact.${e.kind === 'ladder_up' ? 'up' : e.kind === 'ladder_down' ? 'down' : 'enter'}`);
+        break;
+      }
+    }
+    if (!hint) for (const it of this.interactables) {
+      if (Math.abs(px - it.at[0]) <= 1 && Math.abs(py - it.at[1]) <= 1) {
+        hint = t(`interact.${it.kind === 'bed' ? 'sleep' : 'shop'}`);
         break;
       }
     }

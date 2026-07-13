@@ -102,14 +102,24 @@ class Room {
     }
     if (!this._maps) this._maps = {};
     if (!this._maps[mapKey]) {
-      const gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey));
-      if (!this.state.maps) this.state.maps = {};
-      if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects };
-      this._maps[mapKey] = {
-        key: mapKey,
-        ground: gen.ground, objects: this.state.maps[mapKey].objects, tiles: {}, forage: {}, eggs: {},
-        w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn,
-      };
+      if (mapKey === 'house' || mapKey === 'shop') {
+        // interiores são estáticos (piso/parede/móveis não mudam) — sem persistência.
+        const gen = W.makeInterior(mapKey);
+        this._maps[mapKey] = {
+          key: mapKey,
+          ground: gen.ground, objects: gen.objects, tiles: {}, forage: {}, eggs: {},
+          w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn, interactables: gen.interactables,
+        };
+      } else { // mina: objetos (minério) persistidos por nível
+        const gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey));
+        if (!this.state.maps) this.state.maps = {};
+        if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects };
+        this._maps[mapKey] = {
+          key: mapKey,
+          ground: gen.ground, objects: this.state.maps[mapKey].objects, tiles: {}, forage: {}, eggs: {},
+          w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn,
+        };
+      }
     }
     return this._maps[mapKey];
   }
@@ -127,6 +137,7 @@ class Room {
         ground: m.ground, buildings: isOw ? W.BUILDINGS : [], spawn: m.spawn,
         buildingDefs: W.BUILDING_DEFS,
         entrances: m.entrances.map(e => ({ at: e.at, kind: e.kind })),
+        interactables: m.interactables || [],
       },
       state: {
         day: s.day, season: s.season, year: s.year, time: s.time, money: s.money,

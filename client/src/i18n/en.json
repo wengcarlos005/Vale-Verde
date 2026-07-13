@@ -49,6 +49,7 @@
   "build.place": "Click to place · ESC to cancel",
   "build.placed": "Built! 🏗️",
   "build.cancel": "Build canceled",
+  "build.outside": "Go outside to the farm to build.",
 
   "craft.title": "🔨 Crafting Bench",
   "craft.hint": "Turn materials into useful items.",

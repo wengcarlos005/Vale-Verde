@@ -3,8 +3,8 @@
 // na faixa sul, ligadas por uma bifurcação que sai perto da praça da vila. Tudo num
 // único mundo/room (sem troca de mapa) — mesmo padrão da fazenda→vila, só cresce
 // WIDTH/HEIGHT e pinta a região nova.
-// Ground: 0 grama, 1 água (lago), 2 estrada, 3 chão de caverna, 4 areia, 5 água (oceano).
-// Objetos (árvore/pedra/minério/parede de caverna) são mutáveis e vivem no estado.
+// Ground: 0 grama, 1 água (lago), 2 estrada, 3 chão de caverna, 4 areia, 5 água (oceano),
+// 6 piso de madeira (interior). Objetos (árvore/pedra/minério/parede/móveis) vivem no estado.
 const WIDTH = 150;
 const HEIGHT = 80;
 const TILE = 16;
@@ -293,13 +293,48 @@ function makeMineLevel(seed, depth) {
   return { ground, objects, entrances, w, h, spawn: [MINE_UP[0], MINE_UP[1] + 1] };
 }
 
-// Entradas do overworld (prédios que levam a outras telas). O prédio dá o tile de
-// interação (base central); house/shop entram na próxima leva.
+// ---------------- interiores (casa, loja) ----------------
+// Salas fixas entradas pela porta do prédio no overworld. Estáticas (piso/parede/móveis
+// não mudam) — geradas por template, sem persistência. ground 6 = piso de madeira.
+const INT_W = 11, INT_H = 8;
+const INT_DOOR = Math.floor(INT_W / 2);       // vão da porta (embaixo, centro)
+const INT_SPAWN = [INT_DOOR, INT_H - 2];      // onde o jogador aparece ao entrar
+
+function makeInterior(kind) {
+  const w = INT_W, h = INT_H;
+  const ground = [];
+  for (let y = 0; y < h; y++) ground.push(new Array(w).fill(6));
+  const objects = {};
+  // paredes fechando a sala, com vão de porta embaixo no centro
+  for (let x = 0; x < w; x++) { objects[`${x},0`] = { type: 'wall' }; if (x !== INT_DOOR) objects[`${x},${h - 1}`] = { type: 'wall' }; }
+  for (let y = 0; y < h; y++) { objects[`0,${y}`] = { type: 'wall' }; objects[`${w - 1},${y}`] = { type: 'wall' }; }
+  const interactables = [];
+  if (kind === 'house') {
+    objects['2,2'] = { type: 'bed' };            // cama (E → dormir)
+    interactables.push({ at: [2, 2], kind: 'bed' });
+    objects['6,2'] = { type: 'table' };          // mesa decorativa (sprite ~3 tiles, cabe em 6-8)
+  } else { // shop
+    objects[`${INT_DOOR},2`] = { type: 'counter' }; // balcão do Bob (E → abrir loja)
+    interactables.push({ at: [INT_DOOR, 3], kind: 'counter' });
+    objects['2,2'] = { type: 'table' };
+  }
+  // porta de saída → overworld, na frente do prédio correspondente
+  const b = BUILDINGS.find(bl => bl.type === kind);
+  const ret = b ? [b.door[0], b.door[1] + 1] : [SPAWN.x, SPAWN.y];
+  const entrances = [{ at: [INT_DOOR, h - 1], kind: 'door', to: 'overworld', toSpawn: ret }];
+  return { ground, objects, entrances, interactables, w, h, spawn: INT_SPAWN.slice() };
+}
+
+// Entradas do overworld (prédios que levam a outras telas): mina, casa e loja.
 function overworldEntrances() {
   const ents = [];
   const mine = BUILDINGS.find(b => b.type === 'mine_entrance');
   if (mine) {
     ents.push({ at: [mine.x + Math.floor(mine.w / 2), mine.y + mine.h - 1], kind: 'mine', to: 'mine:1', toSpawn: [MINE_UP[0], MINE_UP[1] + 1] });
+  }
+  for (const type of ['house', 'shop']) {
+    const b = BUILDINGS.find(bl => bl.type === type);
+    if (b) ents.push({ at: [b.door[0], b.door[1] + 1], kind: 'door', to: type, toSpawn: INT_SPAWN.slice() });
   }
   return ents;
 }
@@ -350,5 +385,5 @@ function scatterForage(state, n, rnd = Math.random) {
 module.exports = {
   WIDTH, HEIGHT, TILE, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA, MINE_W, MINE_H,
   generateWorld, initialFarmState, inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
-  inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, overworldEntrances, depthOf,
+  inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, makeInterior, overworldEntrances, depthOf,
 };

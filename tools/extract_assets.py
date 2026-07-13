@@ -159,6 +159,13 @@ load(p("Tiles", "Beach", "Beach_Decor_Tiles.png")).save(o("sand_decor.png"))  # 
 load(p("Tiles", "Cliff", "Stone_Cliff_1_Cave_Entrance.png")).save(o("mine_entrance.png"))  # arco esculpido na rocha, 48x48, decorativo (sem colisão)
 load(p("Tiles", "Cave", "Cave_Floor_Ladder.png")).save(o("ladder.png"))  # escada da mina (subir/descer nível), 16x16
 
+# ---------- interiores de casa (Fase C: telas de dentro) ----------
+OLD = os.path.join(os.path.dirname(PACK), "..", "Old_Sprites_Extracted", "Old_Sprites")
+Image.open(os.path.join(OLD, "Walls", "Wood_Floor_1.png")).convert("RGBA").save(o("interior_floor.png"))  # 16x16 tábua
+Image.open(os.path.join(OLD, "Walls", "House_Wood.png")).convert("RGBA").crop((32, 0, 48, 16)).save(o("interior_wall.png"))  # tábua horizontal, 16x16
+load(p("Buildings", "House_Decor", "Beds.png")).crop((0, 160, 32, 192)).save(o("bed.png"))     # cama de casal vermelha, 32x32
+load(p("Buildings", "House_Decor", "Tables.png")).crop((4, 20, 52, 54)).save(o("table.png"))   # mesa/balcão de madeira (bbox justo), 48x34
+
 # Minérios: linha = mineral (0 ferro, 1 cobre, 2 ouro), coluna 3 = estágio com o
 # minério bem exposto/colorido (colunas 0-2 são quase só pedra cinza, pouco legíveis).
 ores = load(p("Outdoor decoration", "Ores.png"))
