@@ -131,6 +131,16 @@ class Room {
         if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {}, monsters: gen.monsters || {} };
         const saved = this.state.maps[mapKey];
         if (saved.monsters == null) saved.monsters = gen.monsters || {}; // migração: mapa salvo antes do sistema de combate
+        // Migração: níveis de mina gerados antes da correção acima podem ter minério
+        // preso no MESMO tile de um monstro (sprites empilhados, aparência de cenário
+        // cortado). Limpa esse minério — o monstro fica, o tile de minério é perdido,
+        // mas é só 1 tile e resolve o visual quebrado em mapas já salvos.
+        if (mapKey.startsWith('mine:') && saved.monsters) {
+          for (const mo of Object.values(saved.monsters)) {
+            const okey = `${mo.x},${mo.y}`;
+            if (saved.objects[okey]) { delete saved.objects[okey]; this.dirty = true; }
+          }
+        }
         // Migração: terreno "ao ar livre" é sempre regerado do código atual (não salvo),
         // então se a geração mudar (praia cresceu, estrada mudou de forma...) um objeto
         // ESPALHADO (árvore/pedra/arbusto/toco) pode ficar preso em cima de areia/água/
@@ -308,6 +318,7 @@ class Room {
     this.state.time += MIN_PER_TICK;
     if (this.state.time >= DAY_END) { this.advanceDay(true); return; }
     this.tickCombat();
+    this.tickMonsters();
     // broadcast do relógio a cada ~10s
     if (Date.now() - this.lastTimeBroadcast > 10000) {
       this.lastTimeBroadcast = Date.now();
@@ -746,6 +757,33 @@ class Room {
       this.dirty = true;
       if (inv.health <= 0) { this.faintInMine(p, inv); continue; }
       this.io.to(p.socketId).emit('inv', inv);
+    }
+  }
+
+  // Monstros vagam perto de casa (hx/hy) sem perseguir o jogador de propósito — mantém a
+  // decisão original de não ter IA de perseguição (reduz risco/escopo), mas agora o
+  // monstro se move de verdade em vez de ficar 100% parado. Cada tick (1s), chance por
+  // monstro de tentar um passo aleatório; só executa se o destino for piso de caverna
+  // livre (sem parede/minério/outro monstro) e continuar dentro do raio de coleira.
+  tickMonsters() {
+    for (const [mapKey, m] of Object.entries(this._maps || {})) {
+      if (!mapKey.startsWith('mine:') || !m.monsters) continue;
+      const monsters = Object.values(m.monsters);
+      if (!monsters.length) continue;
+      for (const mon of monsters) {
+        if (Math.random() > 0.3) continue;
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
+        const nx = mon.x + dx, ny = mon.y + dy;
+        const hx = mon.hx ?? mon.x, hy = mon.hy ?? mon.y;
+        if (Math.hypot(nx - hx, ny - hy) > 3) continue;
+        if (!(m.ground[ny] && m.ground[ny][nx] === 3)) continue;
+        if (m.objects[`${nx},${ny}`]) continue;
+        if (monsters.some((o) => o !== mon && o.x === nx && o.y === ny)) continue;
+        mon.x = nx; mon.y = ny;
+        this.dirty = true;
+        this.emitMap(mapKey, 'monster', { id: mon.id, monster: mon });
+      }
     }
   }
 

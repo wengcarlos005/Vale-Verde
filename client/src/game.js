@@ -847,12 +847,13 @@ class GameScene extends Phaser.Scene {
     const barBg = this.add.rectangle(x, by - sprite.displayHeight - 6, barW, 3, 0x1a1a1a).setDepth(by + 1).setVisible(m.hp < m.maxHp);
     const barFg = this.add.rectangle(x - barW / 2, by - sprite.displayHeight - 6, barW * (m.hp / m.maxHp), 3, 0xd8483c)
       .setOrigin(0, 0.5).setDepth(by + 2).setVisible(m.hp < m.maxHp);
-    this.monsterSprites.set(id, { sprite, barBg, barFg, barW });
+    this.monsterSprites.set(id, { sprite, barBg, barFg, barW, hp: m.hp });
   }
 
   despawnMonster(id) {
     const e = this.monsterSprites.get(id);
     if (!e) return;
+    if (e.moveTween) e.moveTween.stop();
     e.sprite.destroy(); e.barBg.destroy(); e.barFg.destroy();
     this.monsterSprites.delete(id);
   }
@@ -864,8 +865,28 @@ class GameScene extends Phaser.Scene {
     const hurt = m.hp < m.maxHp;
     e.barBg.setVisible(hurt); e.barFg.setVisible(hurt);
     e.barFg.width = e.barW * Math.max(0, m.hp / m.maxHp);
-    e.sprite.setTintFill(0xffffff);
-    this.time.delayedCall(80, () => e.sprite.clearTint());
+    // só pisca de dano quando o hp realmente caiu — sem isso, todo broadcast de
+    // posição (vagar pela mina) também acendia o flash branco de "levou dano".
+    if (m.hp < e.hp) {
+      e.sprite.setTintFill(0xffffff);
+      this.time.delayedCall(80, () => e.sprite.clearTint());
+    }
+    e.hp = m.hp;
+    // desliza suavemente até a nova posição em vez de teleportar — o servidor manda
+    // um tick por segundo (tickMonsters em rooms.js), então a duração do tween cobre
+    // o intervalo entre broadcasts.
+    const x = m.x * T + T / 2, by = m.y * T + T;
+    if (e.sprite.x !== x || e.sprite.y !== by) {
+      if (e.moveTween) e.moveTween.stop();
+      e.moveTween = this.tweens.add({
+        targets: e.sprite, x, y: by, duration: 900, ease: 'Sine.easeInOut',
+        onUpdate: () => {
+          e.sprite.setDepth(e.sprite.y);
+          e.barBg.setPosition(e.sprite.x, e.sprite.y - e.sprite.displayHeight - 6);
+          e.barFg.setPosition(e.sprite.x - e.barW / 2, e.sprite.y - e.sprite.displayHeight - 6);
+        },
+      });
+    }
   }
 
   setAnimals(animals) {
@@ -1469,6 +1490,19 @@ class GameScene extends Phaser.Scene {
           this.socket.emit('enterMap');
           break;
         }
+      }
+    }
+
+    // Coleta automática ao PASSAR POR CIMA de ovo/forrageável/drop de corte-mineração —
+    // sem precisar clicar ou apertar E (pedido explícito do usuário). O servidor já é
+    // idempotente pra 'collect' (segunda chamada na mesma chave vira no-op, `m.forage[key]`
+    // já foi apagado), então reemitir todo frame enquanto o jogador fica parado em cima
+    // não causa coleta duplicada — só emite os poucos frames até a resposta chegar.
+    {
+      const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
+      const hereKey = `${px},${py}`;
+      if ((this.eggsState && this.eggsState[hereKey]) || (this.forageState && this.forageState[hereKey])) {
+        this.socket.emit('action', { type: 'collect', x: px, y: py });
       }
     }
 

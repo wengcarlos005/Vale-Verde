@@ -188,13 +188,14 @@ for name, row in ORE_ROWS.items():
     cell.save(o(f"forage_{name}.png"))  # mesmo sprite: minério largado no chão ao minerar (walk-over)
 
 # Drops de corte/mineração no chão (walk-over, mesmo mecanismo do forrageio) — árvore/
-# arbusto/toco derrubam madeira (reaproveita o sprite de tronco já usado no forrageio
-# nativo), pedra derruba uma pedrinha pequena (sprite de mundo com sombra própria, NÃO
-# um ícone de UI — ver a lição de forage_berry/mushroom logo acima). Era o tronco INTEIRO
-# de 32x16 (mesmo sprite do prop decorativo log_fallen) — ficava com cara de "objeto
-# grande no mundo", não de mini-item pra pegar. Trocado pra uma pilha pequena de lenha
-# cortada (1 tile, 16x16) — lê como "isso é um punhado pra catar", não uma tora inteira.
-load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((0, 13 * 16, 16, 14 * 16)).save(o("forage_wood.png"))
+# arbusto/toco derrubam madeira, pedra derruba uma pedrinha pequena (sprite de mundo com
+# sombra própria, NÃO um ícone de UI — ver a lição de forage_berry/mushroom logo acima).
+# Era o tronco INTEIRO de 32x16 (mesmo sprite do prop decorativo log_fallen) — ficava com
+# cara de "objeto grande no mundo", não de mini-item pra pegar. Trocado pra uma pilha
+# pequena de lenha cortada — bbox real por scan de alpha (14x24, NÃO um tile limpo de
+# 16x16: o crop antigo (0,208,16,224) cortava o topo pontudo da pilha pela metade, ficava
+# com cara de sprite quebrado — o sprite de verdade começa em y=197, não y=208).
+load(p("Outdoor decoration", "Outdoor_Decor.png")).crop((1, 197, 15, 221)).save(o("forage_wood.png"))
 load(p("Outdoor decoration", "Outdoor_Decor_Animations", "Rock_Animations", "Rock_2_Anim.png")).crop((0, 0, 16, 16)).save(o("forage_stone.png"))
 
 # ---------- Praia/porto (Fase C, mundo completo) ----------

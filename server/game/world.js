@@ -528,12 +528,17 @@ function makeMineLevel(seed, depth) {
     if (!floorAndFree(x, y) || hasNearbyContent(scatterState, x, y)) continue;
     const id = `m${nextId++}`;
     const hp = tier.hp + Math.floor(rnd() * 3) + Math.floor(depth / 3);
-    monsters[id] = { id, type: tier.type, x, y, hp, maxHp: hp };
+    // hx/hy = "casa" (posição de origem) — o monstro vaga perto dali (ver tickMonsters em
+    // rooms.js), não é mais 100% parado, mas continua sem perseguir o jogador de propósito.
+    monsters[id] = { id, type: tier.type, x, y, hx: x, hy: y, hp, maxHp: hp };
     placedM++;
   }
 
   // Minério: usa o que sobrou dos candidatos, com um teto (~45% do chão) pra sempre
-  // sobrar espaço de passagem mesmo num formato bem apertado.
+  // sobrar espaço de passagem mesmo num formato bem apertado. Exclui os tiles onde já
+  // colocamos monstro — sem isso, minério podia nascer EM CIMA de um monstro (mesmo
+  // tile), os dois sprites empilhados ficando com aparência de cenário quebrado/cortado.
+  const monsterPos = new Set(Object.values(monsters).map((mo) => `${mo.x},${mo.y}`));
   const oreCounts = mineOreCounts(depth);
   const oreCap = Math.max(6, Math.floor(candidates.length * 0.45));
   let oreBudgetLeft = oreCap;
@@ -542,7 +547,7 @@ function makeMineLevel(seed, depth) {
     const target = Math.min(count, oreBudgetLeft);
     for (const [x, y] of candidates) {
       if (placed >= target) break;
-      if (!floorAndFree(x, y) || hasNearbyContent(scatterState, x, y)) continue;
+      if (!floorAndFree(x, y) || hasNearbyContent(scatterState, x, y) || monsterPos.has(`${x},${y}`)) continue;
       objects[`${x},${y}`] = { type: 'ore', mineral, hp: 3 };
       placed++;
     }
