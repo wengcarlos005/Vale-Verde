@@ -60,6 +60,7 @@
   "craft.spearDesc": "arma corpo a corpo, alcance médio",
   "craft.bowDesc": "arma à distância, alcance longo",
   "craft.shieldDesc": "reduz o dano recebido de monstros ao ser equipado",
+  "craft.rodDesc": "selecione e clique na água (lago ou oceano) para pescar",
 
   "quest.title": "📋 Quadro de Recados",
   "quest.hint": "Entregue o que está pedindo e ganhe moedas — um novo pedido aparece depois.",
@@ -71,6 +72,7 @@
   "progress.hint": "O que a fazenda já descobriu — é cooperativo, conta pra todo mundo.",
   "progress.crops": "🌾 Cultivos colhidos",
   "progress.minerals": "💎 Minérios minerados",
+  "progress.fish": "🐟 Peixes pescados",
   "progress.monsters": "⚔️ Monstros derrotados",
   "progress.mine": "⛏️ Nível mais fundo da mina",
   "progress.mineHint": "A mina tem 100 níveis — quanto mais fundo, mais raro o minério e mais forte o monstro.",
@@ -156,6 +158,14 @@
   "tool.spear": "Lança",
   "tool.bow": "Arco e Flecha",
   "tool.shield": "Escudo",
+  "tool.rod": "Vara de Pesca",
+
+  "fish.carp": "Carpa",
+  "fish.trout": "Truta",
+  "fish.bass": "Robalo",
+  "fish.sardine": "Sardinha",
+  "fish.tuna": "Atum",
+  "fish.squid": "Lula",
 
   "hud.day": "Dia {day} — {season}",
   "interact.sleep": "Dormir (E)",

@@ -357,4 +357,23 @@ skel = load(p("Enemies", "Skeleton", "Skeleton.png"))
 skel.crop((0, 0, 32 * 4, 32)).save(o("mob_skeleton.png"))  # 4 frames idle (linha 0)
 skel.crop((0, 0, 32, 32)).resize((32, 32), Image.NEAREST).save(o("icons/mob_skeleton.png"))
 
+# ---------- pesca (Fase D: roadmap — coleção de peixes) ----------
+# Vara: recorte de um frame "segurando estendido" da folha de animação da vara (o pack só
+# tem poses de mão-segurando-ferramenta por direção, não um ícone plano solto).
+load(p("Player", "Tools", "Fishing_Rod", "Wooden_Fishing_Rod.png")).crop((30, 90, 51, 103)).resize((32, 32), Image.NEAREST).save(o("icons/tool_rod.png"))
+
+# Peixe: o pack só tem uma sombra de peixe nadando pra sobrepor a água (opaca, sem
+# transparência — não dá pra usar como ícone solto) e nenhum sprite de espécie de peixe
+# de verdade. Sintetizado à mão (mesmo espírito do ícone de lança) — um peixinho genérico
+# simples; todas as espécies pescáveis reaproveitam esse mesmo ícone, diferenciadas só
+# por nome/preço (sem sprite próprio por espécie).
+fish = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+df = ImageDraw.Draw(fish)
+OUTLINE, BODY, BELLY = (25, 45, 55, 255), (94, 163, 191, 255), (196, 226, 232, 255)
+df.polygon([(0, 4), (0, 10), (4, 7)], fill=BODY, outline=OUTLINE)  # cauda
+df.ellipse([3, 3, 13, 11], fill=BODY, outline=OUTLINE)             # corpo
+df.ellipse([5, 7, 12, 11], fill=BELLY)                             # barriga clara
+df.rectangle([10, 5, 10, 5], fill=(20, 20, 20, 255))               # olho
+fish.resize((32, 32), Image.NEAREST).save(o("icons/item_fish.png"))
+
 print("assets ok:", len([f for r, _, fs in os.walk(OUT) for f in fs]))

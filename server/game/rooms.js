@@ -1,6 +1,6 @@
 // Salas de jogo: uma por fazenda, servidor autoritativo.
 const { stmts } = require('../db');
-const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
+const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
 const W = require('./world');
 
 const DAY_START = 6 * 60;          // 6:00
@@ -10,7 +10,7 @@ const MIN_PER_TICK = (DAY_END - DAY_START) / (REAL_DAY_MS / 1000); // por segund
 
 const ENERGY_MAX = 100;
 const HEALTH_MAX = 100;
-const COST = { till: 2, water: 1, plant: 1, harvest: 1, chop: 2, mine: 2, place: 1 };
+const COST = { till: 2, water: 1, plant: 1, harvest: 1, chop: 2, mine: 2, place: 1, fish: 3 };
 
 function newInventory() {
   return {
@@ -69,7 +69,8 @@ class Room {
     if (!this.state.forage) { this.state.forage = {}; W.scatterForage(this.state, 25); }
     if (!this.state.quest) this.state.quest = pickQuest();
     if (!this.state.maps) this.state.maps = {}; // estado mutável das telas de mina
-    if (!this.state.discovered) this.state.discovered = { crops: [], minerals: [], monsters: [], maxDepth: 0 };
+    if (!this.state.discovered) this.state.discovered = { crops: [], minerals: [], monsters: [], fish: [], maxDepth: 0 };
+    if (!this.state.discovered.fish) this.state.discovered.fish = []; // migração: menu de progresso ganhou peixe depois
     // migração: mapa cresceu (vila a leste, depois mina/praia/Porto Vale ao sul e mais
     // a leste) — fazendas salvas antes disso têm a área nova vazia (o SCATTER original
     // só roda uma vez, na criação da fazenda). Densidade proporcional à área nova.
@@ -180,6 +181,7 @@ class Room {
       crops: CROPS,
       recipes: RECIPES,
       weapons: WEAPON_STATS,
+      fish: FISH,
       you: { userId: p.userId, inv: this.inv(p.userId) },
       players: this.playersOnMap(m.key).map(q => this.publicPlayer(q)),
     };
@@ -328,7 +330,7 @@ class Room {
     // pagamento da caixa de venda
     let payout = 0;
     for (const e of s.bin) {
-      const val = CROPS[e.item] ? CROPS[e.item].sellPrice : (RESOURCES[e.item] ? RESOURCES[e.item].sellPrice : 0);
+      const val = CROPS[e.item] ? CROPS[e.item].sellPrice : (RESOURCES[e.item] || FISH[e.item] || {}).sellPrice || 0;
       payout += val * e.qty;
     }
     const soldItems = s.bin;
@@ -557,6 +559,21 @@ class Room {
       this.emitMap(p.map, 'object', { key, obj: m.objects[key] });
       socket.emit('inv', inv);
       this.dirty = true;
+    } else if (type === 'fish') {
+      // Pesca simplificada (v1 do roadmap): sem minigame de tempo/precisão de verdade —
+      // clicar num tile de água com a vara equipada já resolve a pegada na hora. Espécie
+      // sorteada entre as que combinam com o tipo de água (doce=lago, salgada=oceano) E a
+      // estação atual (peixe com season=null pega o ano todo).
+      if (ground !== 1 && ground !== 5) return; // só em água (lago OU oceano — a mina reusa ground=1 pro lago de caverna, pesca ali também é válido)
+      if (!inv.items.rod) return;
+      if (!this.spend(inv, COST.fish, socket)) return;
+      const waterType = ground === 1 ? 'pond' : 'ocean';
+      const candidates = Object.entries(FISH).filter(([, f]) => f.water === waterType && (f.season == null || f.season === this.state.season));
+      if (!candidates.length) { socket.emit('inv', inv); return; }
+      const [fishId] = candidates[Math.floor(Math.random() * candidates.length)];
+      this.addItem(inv, fishId, 1);
+      this.discover('fish', fishId);
+      socket.emit('inv', inv);
     }
   }
 
@@ -805,7 +822,7 @@ class Room {
     const inv = this.inv(p.userId);
     const have = inv.items[itemId] || 0;
     const qty = Math.max(1, Math.min(have, Math.floor(data.qty || 1)));
-    const sellable = CROPS[itemId] || RESOURCES[itemId];
+    const sellable = CROPS[itemId] || RESOURCES[itemId] || FISH[itemId];
     if (!sellable || have < 1) return;
     this.addItem(inv, itemId, -qty);
     const entry = this.state.bin.find(e => e.item === itemId);

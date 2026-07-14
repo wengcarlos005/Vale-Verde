@@ -8,9 +8,16 @@ export const TOOLS = ['hoe', 'can', 'axe', 'pickaxe'];
 // acima (só aparecem no hotbar depois de craftadas — hotbarItems() já cobre isso, é só
 // mais um id de inventário comum), mas usam o MESMO padrão de ícone/nome que as tools.
 export const WEAPONS = ['sword', 'spear', 'bow', 'shield'];
+// Vara de pesca: mesma classe de "ferramenta craftada" que as armas (só aparece no
+// hotbar depois de fabricada), mas não é arma nem ferramenta de base — categoria própria.
+export const RODS = ['rod'];
+// Peixes pescáveis: todos reaproveitam o MESMO ícone genérico (o pack não tem sprite por
+// espécie) — só o nome/preço diferencia. Lista espelha `FISH` do servidor (crops.js).
+export const FISH_IDS = ['carp', 'trout', 'bass', 'sardine', 'tuna', 'squid'];
 
 export function itemIcon(id) {
-  if (TOOLS.includes(id) || WEAPONS.includes(id)) return `/assets/icons/tool_${id}.png`;
+  if (TOOLS.includes(id) || WEAPONS.includes(id) || RODS.includes(id)) return `/assets/icons/tool_${id}.png`;
+  if (FISH_IDS.includes(id)) return '/assets/icons/item_fish.png';
   if (id.startsWith('seed_')) return `/assets/icons/${id}.png`;
   return `/assets/icons/item_${id}.png`;
 }
@@ -21,7 +28,8 @@ export const FOODS = new Set(['berry', 'mushroom']);
 const CRAFTED_ITEMS = new Set(['fence']);
 
 export function itemName(id) {
-  if (TOOLS.includes(id) || WEAPONS.includes(id)) return t(`tool.${id}`);
+  if (TOOLS.includes(id) || WEAPONS.includes(id) || RODS.includes(id)) return t(`tool.${id}`);
+  if (FISH_IDS.includes(id)) return t(`fish.${id}`);
   if (id.startsWith('seed_')) return t('seed.suffix', { crop: t(`crop.${id.slice(5)}`) });
   if (id in RESOURCE_PRICE || CRAFTED_ITEMS.has(id)) return t(`item.${id}`);
   return t(`crop.${id}`);
@@ -34,8 +42,9 @@ export class Hud {
     this.slots = [];        // [{id, qty}]
     this.selected = 0;
     this.crops = {};
+    this.fish = {};
     this.quest = null;
-    this.discovered = { crops: [], minerals: [], monsters: [], maxDepth: 0 };
+    this.discovered = { crops: [], minerals: [], monsters: [], fish: [], maxDepth: 0 };
     this.state = { money: 0, season: 0, day: 1, year: 1, time: 360, bin: [] };
     $('btn-progress').addEventListener('click', () => this.openProgress());
 
@@ -325,9 +334,11 @@ export class Hud {
     const box = $('bin-sell-items');
     box.innerHTML = '';
     const sellable = Object.entries(this.inv.items)
-      .filter(([id]) => !id.startsWith('seed_') && (this.crops[id] || id in RESOURCE_PRICE));
+      .filter(([id]) => !id.startsWith('seed_') && (this.crops[id] || id in RESOURCE_PRICE || (this.fish && this.fish[id])));
     for (const [id, qty] of sellable) {
-      const price = this.crops[id] ? this.crops[id].sellPrice : (RESOURCE_PRICE[id] || 0);
+      const price = this.crops[id] ? this.crops[id].sellPrice
+        : (this.fish && this.fish[id]) ? this.fish[id].sellPrice
+        : (RESOURCE_PRICE[id] || 0);
       const div = document.createElement('div');
       div.className = 'shop-item';
       div.innerHTML = `<img src="${itemIcon(id)}" alt="">
@@ -352,7 +363,7 @@ export class Hud {
   // menu mostra cada categoria como "descobertos/total", cinza-e-cadeado até a fazenda
   // (é cooperativo, não por jogador) colher/minerar/derrotar aquilo pela primeira vez.
   setDiscovered(d) {
-    this.discovered = d || { crops: [], minerals: [], monsters: [], maxDepth: 0 };
+    this.discovered = d || { crops: [], minerals: [], monsters: [], fish: [], maxDepth: 0 };
     if ($('modal-progress').classList.contains('open')) this.renderProgress();
   }
 
@@ -362,7 +373,7 @@ export class Hud {
   }
 
   renderProgress() {
-    const disc = this.discovered || { crops: [], minerals: [], monsters: [], maxDepth: 0 };
+    const disc = this.discovered || { crops: [], minerals: [], monsters: [], fish: [], maxDepth: 0 };
     const CROP_IDS = ['turnip', 'potato', 'carrot', 'strawberry', 'tomato', 'corn', 'pepper', 'onion', 'cabbage', 'beet'];
     const MINERAL_IDS = ['iron', 'copper', 'gold'];
     const MONSTER_IDS = ['slime_small', 'slime_medium', 'slime_big', 'skeleton'];
@@ -382,6 +393,7 @@ export class Hud {
     const html = [
       section('progress.crops', CROP_IDS, disc.crops, (id) => `/assets/icons/item_${id}.png`, (id) => t(`crop.${id}`)),
       section('progress.minerals', MINERAL_IDS, disc.minerals, (id) => `/assets/icons/item_${id}.png`, (id) => t(`item.${id}`)),
+      section('progress.fish', FISH_IDS, disc.fish || [], () => '/assets/icons/item_fish.png', (id) => t(`fish.${id}`)),
       section('progress.monsters', MONSTER_IDS, disc.monsters, (id) => `/assets/icons/mob_${id}.png`, (id) => t(`mob.${id}`)),
       `<div class="prog-section"><h3>${t('progress.mine')} <span class="count">${disc.maxDepth}/100</span></h3>
         <div class="prog-depth">${t('progress.mineHint')}

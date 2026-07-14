@@ -658,7 +658,7 @@ function initialFarmState(seed) {
     // jogador individual — é cooperativo, o progresso é da fazenda toda) colhe um
     // cultivo, minera um minério ou derrota um monstro. maxDepth = nível mais fundo já
     // alcançado na mina (não precisa ter sobrevivido, só ter chegado lá).
-    discovered: { crops: [], minerals: [], monsters: [], maxDepth: 0 },
+    discovered: { crops: [], minerals: [], monsters: [], fish: [], maxDepth: 0 },
   };
   scatterForage(state, 25, mulberry32(seed ^ 0x9e37));
   return state;

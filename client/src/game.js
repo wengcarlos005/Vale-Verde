@@ -159,6 +159,7 @@ class GameScene extends Phaser.Scene {
     L.image('forage_gold', '/assets/forage_gold.png');
     for (const tl of ['hoe', 'can', 'axe', 'pickaxe']) L.image(`tool_${tl}`, `/assets/icons/tool_${tl}.png`);
     for (const wp of ['sword', 'spear', 'bow', 'shield']) L.image(`tool_${wp}`, `/assets/icons/tool_${wp}.png`);
+    L.image('tool_rod', '/assets/icons/tool_rod.png');
     // Monstros da mina: 4 frames idle cada, mesmo padrão dos outros bichos (chicken etc).
     L.spritesheet('mob_slime_small', '/assets/mob_slime_small.png', { frameWidth: 16, frameHeight: 16 });
     L.spritesheet('mob_slime_medium', '/assets/mob_slime_medium.png', { frameWidth: 32, frameHeight: 32 });
@@ -216,6 +217,7 @@ class GameScene extends Phaser.Scene {
     this.crops = d.crops;
     this.recipes = d.recipes || {};
     this.weapons = d.weapons || {};
+    this.fish = d.fish || {};
     this.tilesState = d.state.tiles;
     this.objectsState = d.state.objects;
     this.buildingsState = d.state.buildings || [];
@@ -238,6 +240,7 @@ class GameScene extends Phaser.Scene {
       equip: (item) => this.socket.emit('equip', { item }),
     });
     this.hud.crops = this.crops;
+    this.hud.fish = this.fish;
     this.hud.buildingDefs = this.buildingDefs;
     this.hud.recipes = this.recipes;
     this.hud.setInv(d.you.inv);
@@ -1246,14 +1249,17 @@ class GameScene extends Phaser.Scene {
     else if (item && item.id === 'can') type = 'water';
     else if (item && item.id.startsWith('seed_')) { type = 'plant'; extra.crop = item.id.slice(5); }
     else if (item && item.id === 'fence' && !obj && ground === 0) { type = 'place'; extra.item = 'fence'; }
+    // Pesca: vara equipada + clique num tile de água (lago OU oceano — a mina reusa
+    // ground=1 pro lago de caverna em alguns formatos de nível, pesca ali também vale).
+    else if (item && item.id === 'rod' && (ground === 1 || ground === 5)) { type = 'fish'; }
 
     if (!type) return;
     if (type === 'water' && ground !== 1 && (!tile || !tile.tilled)) return;
     if (type === 'place' && tile) return;
     this.socket.emit('action', { type, x: tx, y: ty, ...extra });
     this.playAnim(me, 'act', me.dir, true);
-    // ferramenta na mão dando o golpe (machado, picareta, enxada, regador)
-    const toolFor = { chop: 'axe', mine: 'pickaxe', till: 'hoe', water: 'can', plant: null, harvest: null };
+    // ferramenta na mão dando o golpe (machado, picareta, enxada, regador, vara)
+    const toolFor = { chop: 'axe', mine: 'pickaxe', till: 'hoe', water: 'can', plant: null, harvest: null, fish: 'rod' };
     this.showToolSwing(me, toolFor[type]);
     if (type === 'harvest') this.popHarvest(key);
     this.sendMove(true);

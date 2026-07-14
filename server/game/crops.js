@@ -57,6 +57,7 @@ const RECIPES = {
   spear: { cost: { wood: 3, iron: 1 }, give: 'spear', qty: 1 },
   bow: { cost: { wood: 3, stone: 1 }, give: 'bow', qty: 1 },
   shield: { cost: { wood: 2, stone: 3 }, give: 'shield', qty: 1 },
+  rod: { cost: { wood: 3, iron: 1 }, give: 'rod', qty: 1 },
 };
 
 // Estatísticas de combate por arma. `range` em tiles (folga extra aplicada no cliente e
@@ -69,6 +70,21 @@ const WEAPON_STATS = {
   spear: { range: 2.3, damage: 2 },
   bow: { range: 4.5, damage: 2 },
   shield: { range: 0, damage: 0, block: 0.5 },
+};
+
+// Peixes: pescáveis em água doce (lago da fazenda OU o lago de caverna de alguns
+// formatos de nível da mina — mesmo ground=1) ou água salgada (oceano da praia,
+// ground=5). `season` null = pega o ano todo; senão só na estação indicada (0
+// primavera..3 inverno) — mesmo enum já usado em CROPS.season. Sem sprite de espécie
+// própria no pack (só um peixinho genérico animado nas tiles de água) — todos usam o
+// mesmo ícone no client, diferenciados por cor (`tint`, hex) e nome/preço.
+const FISH = {
+  carp:    { water: 'pond', season: null, sellPrice: 25, tint: 0x6fae5c },
+  trout:   { water: 'pond', season: 0, sellPrice: 45, tint: 0xc99a2e },
+  bass:    { water: 'pond', season: 1, sellPrice: 55, tint: 0x4d7fa6 },
+  sardine: { water: 'ocean', season: null, sellPrice: 30, tint: 0xb0b8c0 },
+  tuna:    { water: 'ocean', season: 1, sellPrice: 90, tint: 0xb85a2c },
+  squid:   { water: 'ocean', season: 2, sellPrice: 70, tint: 0x8a5ca8 },
 };
 
 // Pedidos do quadro de recados: só itens sempre obteníveis (não presos à estação).
@@ -95,4 +111,4 @@ function stageOf(crop, daysGrown) {
   return Math.min(3, Math.floor((daysGrown / def.days) * 4));
 }
 
-module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
+module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
