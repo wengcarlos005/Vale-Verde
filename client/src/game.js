@@ -41,6 +41,11 @@ function defaultAppearance(userId) {
 }
 
 let game = null;
+// Prédio comprado na loja mas ainda não posicionado — a loja virou tela própria (não dá
+// pra abrir o modo construção lá dentro, os prédios ficam no overworld), então a
+// intenção fica guardada AQUI FORA da cena (sobrevive à troca de mapa, já que cada
+// 'joined' destrói e recria o Phaser.Game inteiro) até o jogador voltar pro overworld.
+let pendingBuild = null;
 
 // Tela de carregamento (cobre o game-container até o mundo aparecer)
 function loading(pct, msgKey) {
@@ -333,6 +338,15 @@ class GameScene extends Phaser.Scene {
     window.gvScene = this; // handle para debug/testes
     this.moveAccum = 0;
     this.lastSent = { x: 0, y: 0, dir: '', anim: '' };
+
+    // Construção pendente (comprou um prédio na loja, mas a loja agora é uma tela própria
+    // — não dá pra posicionar lá dentro): a intenção fica guardada em `pendingBuild` (fora
+    // da cena, sobrevive à troca de mapa) e é retomada automaticamente assim que o
+    // jogador volta pro overworld.
+    if (this.mapKey === 'overworld' && pendingBuild) {
+      const type = pendingBuild; pendingBuild = null;
+      this.enterBuildMode(type);
+    }
 
     // mundo pronto: completa a barra e esconde a tela de carregamento após o 1º frame
     loading(100, 'loading.ready');
@@ -978,6 +992,12 @@ class GameScene extends Phaser.Scene {
     const key = `${x},${y}`;
     if (this.propBlockers && this.propBlockers.has(key)) return true;
     if (this.npcBlockers && this.npcBlockers.has(key)) return true;
+    // monstro da mina: bloqueia como um obstáculo de verdade (antes dava pra atravessar
+    // por cima andando, o que também deixava o dano de contato difícil de perceber — o
+    // jogador só tomava dano se ficasse EXATAMENTE em cima do monstro).
+    if (this.monstersState) {
+      for (const m of Object.values(this.monstersState)) if (m.x === x && m.y === y) return true;
+    }
     // colisão real do prédio: h reduzido pela margem transparente da base do sprite
     // (padBottom) — sem isso a colisão "sobra" além da parede visível.
     const inRect = (b) => {
@@ -1058,8 +1078,11 @@ class GameScene extends Phaser.Scene {
   enterBuildMode(type) {
     const def = this.buildingDefs[type];
     if (!def) return;
-    // só dá pra construir no overworld (prédios ficam na fazenda, não dentro da loja)
-    if (this.mapKey !== 'overworld') { this.hud.toast(t('build.outside')); this.hud.closeModals(); return; }
+    // Só dá pra construir no overworld (prédios ficam na fazenda, não dentro da loja) —
+    // mas a loja hoje é uma tela própria, então "comprar" lá dentro não pode simplesmente
+    // falhar (o jogador compra, sai, e não tem como posicionar o que comprou). Guarda a
+    // intenção em `pendingBuild` (fora da cena) e retoma sozinho ao voltar pro overworld.
+    if (this.mapKey !== 'overworld') { pendingBuild = type; this.hud.toast(t('build.outside'), 4000); this.hud.closeModals(); return; }
     this.hud.closeModals();
     this.cancelBuild();
     const ghost = this.add.image(0, 0, type).setOrigin(0, 1).setAlpha(0.7).setDepth(100000);

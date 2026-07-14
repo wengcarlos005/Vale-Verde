@@ -715,8 +715,12 @@ class Room {
       if (!m || !m.monsters) continue;
       const monsters = Object.values(m.monsters);
       if (!monsters.length) continue;
+      // Raio generoso o bastante pra cobrir "andou pro tile vizinho" (distância 1 em
+      // ortogonal), não só "ficou exatamente em cima do monstro" — monstro também virou
+      // obstáculo de colisão no cliente (blockedAt), então "vizinho" já é o mais perto
+      // que dá pra chegar sem atravessar por cima dele.
       const px = p.x / W.TILE, py = p.y / W.TILE;
-      if (!monsters.some((mon) => Math.hypot(px - mon.x, py - mon.y) < 0.9)) continue;
+      if (!monsters.some((mon) => Math.hypot(px - mon.x, py - mon.y) < 1.3)) continue;
       const inv = this.inv(p.userId);
       const depth = W.depthOf(p.map);
       let dmg = 3 + Math.floor(depth / 3);

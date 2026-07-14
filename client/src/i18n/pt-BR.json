@@ -50,7 +50,7 @@
   "build.place": "Clique para posicionar · ESC cancela",
   "build.placed": "Construído! 🏗️",
   "build.cancel": "Construção cancelada",
-  "build.outside": "Saia para a fazenda para construir.",
+  "build.outside": "Volte pra fazenda — a construção começa sozinha assim que você sair.",
 
   "craft.title": "🔨 Bancada de Fabricação",
   "craft.hint": "Transforme materiais em itens úteis.",
