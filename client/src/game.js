@@ -1493,15 +1493,17 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Coleta automática ao PASSAR POR CIMA de ovo/forrageável/drop de corte-mineração —
-    // sem precisar clicar ou apertar E (pedido explícito do usuário). O servidor já é
-    // idempotente pra 'collect' (segunda chamada na mesma chave vira no-op, `m.forage[key]`
-    // já foi apagado), então reemitir todo frame enquanto o jogador fica parado em cima
-    // não causa coleta duplicada — só emite os poucos frames até a resposta chegar.
+    // Coleta automática ao PASSAR POR CIMA — só madeira/pedra (drop de corte/mineração,
+    // pedido explícito do usuário: "é apenas madeira e pedra, tire dos outros"). Ovo e
+    // forrageáveis nativos (fruta/cogumelo/tronco) e minério (ferro/cobre/ouro) continuam
+    // exigindo clique/E. O servidor já é idempotente pra 'collect' (segunda chamada na
+    // mesma chave vira no-op, `m.forage[key]` já foi apagado), então reemitir todo frame
+    // enquanto o jogador fica parado em cima não causa coleta duplicada.
     {
       const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
       const hereKey = `${px},${py}`;
-      if ((this.eggsState && this.eggsState[hereKey]) || (this.forageState && this.forageState[hereKey])) {
+      const f = this.forageState && this.forageState[hereKey];
+      if (f && (f.type === 'wood' || f.type === 'stone')) {
         this.socket.emit('action', { type: 'collect', x: px, y: py });
       }
     }
