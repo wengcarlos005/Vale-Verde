@@ -475,9 +475,12 @@ function makeMineLevel(seed, depth) {
     shortcutAt = findFloorNear(isFloor, w, h, 2, Math.floor(h / 2), 1, 0);
   }
 
-  // Lago (formas 'lake'/'lake_pillars'): reaproveita o ground do lago normal (1) — já
-  // bloqueia e já tem autotile de borda no cliente, sem precisar de tileset novo. Poupa
-  // um raio ao redor das escadas E do atalho pra nenhum dos três afogar.
+  // Lago (formas 'lake'/'lake_pillars'): usa ground=5 (oceano), NÃO ground=1 (lago da
+  // fazenda) — o ground=1 vem com uma borda decorativa de GRAMA no cliente (pensada pro
+  // lago cercado de grama da fazenda), que ficava com uma moldura verde bizarra encostada
+  // no chão de caverna marrom (reportado pelo usuário: "lago não tá bem conectado", a
+  // borda verde lia como se fosse uma parede/coisa fora do lugar). Ground=5 renderiza só
+  // água lisa sem moldura nenhuma — sem transição suave, mas sem cor errada também.
   if (cfg.shape === 'lake' || cfg.shape === 'lake_pillars') {
     const cx = Math.floor(w / 2), cy = Math.floor(h / 2);
     const rx = Math.max(3, Math.floor(w * 0.16)), ry = Math.max(3, Math.floor(h * 0.14));
@@ -486,7 +489,7 @@ function makeMineLevel(seed, depth) {
       if (!isFloor(x, y)) continue;
       if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 > 1) continue;
       if (nearReserved(x, y)) continue;
-      ground[y][x] = 1;
+      ground[y][x] = 5;
       delete objects[`${x},${y}`];
     }
   }

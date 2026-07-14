@@ -22,6 +22,9 @@ export const OUTFIT_COLORS = ['black', 'blue', 'green', 'orange', 'pink', 'purpl
 // balcão, cama, prateleira). Ancorado no canto inferior-esquerdo, igual ao render (mesma
 // convenção de `by = y*T+T`, origin(0,1)): cobre colunas [ax, ax+w) e linhas (ay-h, ay].
 const OBJ_FOOTPRINT = { table: [3, 2], counter: [3, 2], bed: [2, 2], shelf: [2, 2] };
+// Drops de corte/mineração (ao contrário dos forrageáveis nativos berry/mushroom/log) —
+// ver setForage(): esses flutuam, os nativos não.
+const DROP_TYPES = new Set(['wood', 'stone', 'iron', 'copper', 'gold']);
 
 const T = 16;                       // tile
 const SPEED = 95;                   // px/s
@@ -328,6 +331,8 @@ class GameScene extends Phaser.Scene {
 
     // tint noturno
     this.nightRect = this.add.rectangle(0, 0, 4000, 4000, 0x0a1030).setOrigin(0).setScrollFactor(0).setDepth(99999).setAlpha(0);
+    // flash vermelho ao tomar dano (ver s.on('inv') em bindSocket)
+    this.damageRect = this.add.rectangle(0, 0, 4000, 4000, 0xdd2222).setOrigin(0).setScrollFactor(0).setDepth(99998).setAlpha(0);
 
     // cursor de tile
     this.cursor = this.add.image(0, 0, 'cursor').setOrigin(0).setDepth(90000).setVisible(false);
@@ -809,7 +814,14 @@ class GameScene extends Phaser.Scene {
     if (f) {
       if (!cur) {
         const [x, y] = key.split(',').map(Number);
-        const sp = this.add.image(x * T + T / 2, y * T + T - 2, `forage_${f.type}`).setOrigin(0.5, 1).setDepth(y * T + T - 2);
+        const baseY = y * T + T - 2;
+        const sp = this.add.image(x * T + T / 2, baseY, `forage_${f.type}`).setOrigin(0.5, 1).setDepth(baseY);
+        // Drops de corte/mineração (não os forrageáveis nativos berry/mushroom/log, que
+        // ficam parados "crescendo" no cenário) flutuam suavemente — deixa claro que é
+        // item pra catar, não decoração (pedido do usuário depois de ver os drops parados).
+        if (DROP_TYPES.has(f.type)) {
+          this.tweens.add({ targets: sp, y: baseY - 3, duration: 550, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+        }
         this.forageSprites.set(key, sp);
       }
     } else if (cur) {
@@ -1153,6 +1165,14 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: arrow, x: to.x, y: to.y, duration: 160, onComplete: () => arrow.destroy() });
   }
 
+  // Pisca a tela de vermelho — feedback de "eu tomei dano" (ver s.on('inv') em
+  // bindSocket). Sem isso o dano por contato na mina só mexia a barra de vida, fácil de
+  // não notar e ler como "o monstro não faz nada".
+  flashDamage() {
+    this.damageRect.setAlpha(0.35);
+    this.tweens.add({ targets: this.damageRect, alpha: 0, duration: 300, ease: 'Quad.out' });
+  }
+
   doAction(tx, ty, worldX, worldY) {
     // Ataque em monstro tem prioridade se uma arma ofensiva tá selecionada (escudo não
     // ataca, só bloqueia — resolvido passivamente no servidor via 'equip').
@@ -1355,7 +1375,14 @@ class GameScene extends Phaser.Scene {
       this.addBuilding(building);
       this.hud.toast(t('build.placed'));
     });
-    s.on('inv', (inv) => this.hud.setInv(inv));
+    s.on('inv', (inv) => {
+      // Flash vermelho na tela quando a vida cai — sem isso, tomar dano por contato na
+      // mina só mexia a barrinha (fácil de não perceber, lia como "monstro não faz
+      // nada"). `lastHealth` começa null pra não disparar no primeiro 'inv' da sessão.
+      if (this.lastHealth != null && inv.health < this.lastHealth) this.flashDamage();
+      this.lastHealth = inv.health;
+      this.hud.setInv(inv);
+    });
     s.on('money', ({ money }) => this.hud.setMoney(money));
     s.on('bin', ({ bin }) => this.hud.setBin(bin));
     s.on('quest', ({ quest }) => this.hud.setQuest(quest));
