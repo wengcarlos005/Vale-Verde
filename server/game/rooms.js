@@ -139,6 +139,16 @@ class Room {
         if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {}, monsters: gen.monsters || {} };
         const saved = this.state.maps[mapKey];
         if (saved.monsters == null) saved.monsters = gen.monsters || {}; // migração: mapa salvo antes do sistema de combate
+        // Migração: níveis de mina salvos ANTES da escada escondida não têm a pedra
+        // especial no tile de descida (a escada sempre esteve visível ali) — considera
+        // já revelada nesse caso, pra não trancar quem já tinha chegado lá. Só fica
+        // escondida se o objeto com `hidesStairs:true` realmente existir (nível gerado
+        // DEPOIS desta mudança).
+        if (mapKey.startsWith('mine:') && saved.stairsRevealed == null) {
+          const downEnt = entrances.find((e) => e.kind === 'ladder_down');
+          const downObj = downEnt && saved.objects[`${downEnt.at[0]},${downEnt.at[1]}`];
+          saved.stairsRevealed = !(downObj && downObj.hidesStairs);
+        }
         // Migração: níveis de mina gerados antes da correção acima podem ter minério
         // preso no MESMO tile de um monstro (sprites empilhados, aparência de cenário
         // cortado). Limpa esse minério — o monstro fica, o tile de minério é perdido,
@@ -195,6 +205,7 @@ class Room {
         tiles: m.tiles, objects: m.objects, bin: s.bin,
         animals: isOw ? s.animals : [], eggs: m.eggs, buildings: isOw ? s.buildings : [],
         forage: m.forage, quest: s.quest, monsters: m.monsters || {}, discovered: s.discovered,
+        stairsRevealed: m.key.startsWith('mine:') ? !!(s.maps[m.key] && s.maps[m.key].stairsRevealed) : true,
       },
       crops: CROPS,
       recipes: RECIPES,
@@ -281,6 +292,10 @@ class Room {
     const px = Math.round(p.x / W.TILE), py = Math.round(p.y / W.TILE);
     const ent = cur.entrances.find(e => Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1);
     if (!ent) return;
+    if (ent.kind === 'ladder_down') {
+      const mapState = this.state.maps[p.map];
+      if (!mapState || !mapState.stairsRevealed) { socket.emit('err', { code: 'stairs_hidden' }); return; }
+    }
     socket.leave(this.mapChannel(p.map));
     socket.to(this.mapChannel(p.map)).emit('playerLeft', { userId: p.userId });
     p.map = ent.to;
@@ -566,6 +581,13 @@ class Room {
         m.forage[key] = { type: drop[0], give: drop[0], qty: drop[1] };
         this.emitMap(p.map, 'object', { key, obj: null });
         this.emitMap(p.map, 'forage', { key, item: m.forage[key] });
+        // Escada escondida: essa pedra em particular guardava a descida — revela pra
+        // todo mundo na mesma tela (é cooperativo, quem achar libera pra todos).
+        if (obj.hidesStairs) {
+          const mapState = this.state.maps[p.map];
+          if (mapState) mapState.stairsRevealed = true;
+          this.emitMap(p.map, 'stairsRevealed', { at: [x, y] });
+        }
       } else {
         this.emitMap(p.map, 'object', { key, obj });
       }
@@ -717,14 +739,25 @@ class Room {
   }
 
   // Arma equipada no hotbar — o client só manda isso quando seleciona/desseleciona uma
-  // arma (não a cada frame). Guardado no inventário pra o tick de combate saber resolver
-  // o bloqueio do escudo (o servidor não vê a seleção do hotbar de outra forma).
+  // arma (não a cada frame). Guardado no inventário pra o tick de combate saber qual arma
+  // é (dano do ataque) e se É o escudo (pré-requisito pro bloqueio ATIVO, ver onBlock).
   onEquip(socket, data) {
     const p = this.players.get(socket.id);
     if (!p) return;
     const inv = this.inv(p.userId);
     const item = data && data.item ? String(data.item) : null;
     inv.equipped = (item && WEAPON_STATS[item]) ? item : null;
+  }
+
+  // Bloqueio ATIVO do escudo — pedido explícito do usuário ("a gente também pode
+  // bloquear com escudo"): antes o escudo reduzia dano só por estar EQUIPADO, sempre,
+  // passivamente; agora precisa estar segurando o botão de bloqueio nesse instante
+  // também (`p.blocking`, checado em tickCombat). O client manda isso só quando o
+  // estado muda (segurar/soltar), não a cada frame.
+  onBlock(socket, blocking) {
+    const p = this.players.get(socket.id);
+    if (!p) return;
+    p.blocking = !!blocking;
   }
 
   // Atacar um monstro: sem x/y (o alvo é o monstro, não um tile) — alcance vem da arma
@@ -759,9 +792,10 @@ class Room {
     }
   }
 
-  // Dano por contato: monstros são PARADOS (sem perseguição, decisão explícita pra
-  // reduzir risco/escopo) — se o jogador fica perto (mesmo tile ou vizinho), leva dano a
-  // cada tick (1s) enquanto continuar ali. Escudo equipado reduz o dano recebido.
+  // Dano por contato: se o jogador fica perto de um monstro (mesmo tile ou vizinho),
+  // leva dano a cada tick (1s) enquanto continuar ali. Bloqueio ATIVO com escudo (não
+  // basta ter equipado — precisa estar segurando o botão de bloqueio nesse instante,
+  // `p.blocking`, setado por onBlock) reduz o dano recebido.
   tickCombat() {
     for (const p of this.players.values()) {
       if (!p.map || !p.map.startsWith('mine:')) continue;
@@ -774,11 +808,15 @@ class Room {
       // obstáculo de colisão no cliente (blockedAt), então "vizinho" já é o mais perto
       // que dá pra chegar sem atravessar por cima dele.
       const px = p.x / W.TILE, py = p.y / W.TILE;
-      if (!monsters.some((mon) => Math.hypot(px - mon.x, py - mon.y) < 1.3)) continue;
+      const attackers = monsters.filter((mon) => Math.hypot(px - mon.x, py - mon.y) < 1.3);
+      if (!attackers.length) continue;
+      // Feedback visual do golpe (animação de investida no cliente) — um evento por
+      // monstro que efetivamente atacou nesse tick, não por monstro qualquer no mapa.
+      for (const mon of attackers) this.emitMap(p.map, 'monsterAttack', { id: mon.id });
       const inv = this.inv(p.userId);
       const depth = W.depthOf(p.map);
       let dmg = 3 + Math.floor(depth / 3);
-      if (inv.equipped === 'shield' && inv.items.shield) dmg = Math.max(1, Math.ceil(dmg * (1 - WEAPON_STATS.shield.block)));
+      if (p.blocking && inv.equipped === 'shield' && inv.items.shield) dmg = Math.max(1, Math.ceil(dmg * (1 - WEAPON_STATS.shield.block)));
       inv.health = Math.max(0, inv.health - dmg);
       p.lastHitAt = Date.now(); // pausa a regeneração passiva por um tempo (ver tickHealthRegen)
       this.dirty = true;
@@ -805,31 +843,79 @@ class Room {
     }
   }
 
-  // Monstros vagam perto de casa (hx/hy) sem perseguir o jogador de propósito — mantém a
-  // decisão original de não ter IA de perseguição (reduz risco/escopo), mas agora o
-  // monstro se move de verdade em vez de ficar 100% parado. Roda no próprio timer de
-  // 350ms (não no tick de 1s do relógio/combate — a 1 tile por chamada, um tick de 1s
-  // capava a velocidade em "1 tile/segundo" mesmo a 100% de chance, muito mais lento que
-  // o jogador (95px/s) e lido como "quase parado"). Chance por chamada de tentar um passo
-  // aleatório; só executa se o destino for piso de caverna livre (sem parede/minério/
-  // outro monstro) e continuar dentro do raio de coleira.
+  // Monstros: perseguem o jogador de verdade quando ele chega perto (pedido explícito do
+  // usuário: "os monstros não perseguem o jogador" — decisão anterior de "só vagar, sem
+  // perseguição" foi revertida). Três estados por monstro, resolvidos nessa ordem:
+  // 1) PERSEGUIR: jogador mais próximo no mesmo mapa dentro de CHASE_RADIUS E o monstro
+  //    ainda não se afastou demais de casa (GIVE_UP_RADIUS) — passo guloso na direção do
+  //    jogador (eixo de maior diferença primeiro, cai pro outro eixo se bloqueado; não é
+  //    pathfinding de verdade, mas as salas da mina são abertas o bastante pra "sentir"
+  //    perseguição sem precisar de A* completo).
+  // 2) VOLTAR PRA CASA: se por perseguir demais (ou qualquer outro motivo) o monstro ficou
+  //    fora do raio de coleira (3 tiles de hx/hy), anda direto de volta em vez de vagar
+  //    aleatoriamente — sem isso, o wander (que só aceita passos que RESULTEM dentro da
+  //    coleira) nunca conseguia se recuperar sozinho de estar longe de casa.
+  // 3) VAGAR: comportamento de sempre (chance por chamada, passo aleatório dentro da
+  //    coleira) quando não há jogador por perto.
+  // Roda no timer próprio de 350ms (não no tick de 1s do relógio/combate — ver comentário
+  // antigo preservado: 1 tile/segundo lia como "quase parado" perto dos 95px/s do jogador).
   tickMonsters() {
     if (this.players.size === 0) return;
+    const CHASE_RADIUS = 5, GIVE_UP_RADIUS = 9, LEASH_RADIUS = 3;
     for (const [mapKey, m] of Object.entries(this._maps || {})) {
       if (!mapKey.startsWith('mine:') || !m.monsters) continue;
       const monsters = Object.values(m.monsters);
       if (!monsters.length) continue;
+      const playersHere = this.playersOnMap(mapKey);
+      const isFree = (x, y, mon) =>
+        m.ground[y] && m.ground[y][x] === 3 && !m.objects[`${x},${y}`] &&
+        !monsters.some((o) => o !== mon && o.x === x && o.y === y) &&
+        !playersHere.some((pl) => Math.round(pl.x / W.TILE) === x && Math.round(pl.y / W.TILE) === y);
+      // BUG REAL achado testando: com só eixo-primário + eixo-secundário como opções, um
+      // monstro alinhado em linha reta com o alvo (mesma linha/coluna — comum, é só um
+      // minério no caminho) ficava TRAVADO sempre que o passo primário batia em algo,
+      // porque o "secundário" era [0,0] (sem diferença nesse eixo) — sem fallback nenhum.
+      // Fix: completa a lista com os dois passos PERPENDICULARES (rodeiam o obstáculo,
+      // ainda fazem progresso ao longo de várias chamadas) antes do passo pra TRÁS (só
+      // usado como último recurso — andar pra trás nunca aproxima do alvo).
+      const stepToward = (mon, tx, ty) => {
+        const ddx = tx - mon.x, ddy = ty - mon.y;
+        const alongX = Math.abs(ddx) >= Math.abs(ddy);
+        const primary = alongX ? [Math.sign(ddx), 0] : [0, Math.sign(ddy)];
+        const secondary = alongX ? [0, Math.sign(ddy)] : [Math.sign(ddx), 0];
+        const perpA = alongX ? [0, 1] : [1, 0];
+        const perpB = alongX ? [0, -1] : [-1, 0];
+        const reverse = [-primary[0], -primary[1]];
+        const options = [primary, secondary, perpA, perpB, reverse];
+        for (const [dx, dy] of options) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = mon.x + dx, ny = mon.y + dy;
+          if (isFree(nx, ny, mon)) return [nx, ny];
+        }
+        return null;
+      };
       for (const mon of monsters) {
-        if (Math.random() > 0.5) continue;
-        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-        const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
-        const nx = mon.x + dx, ny = mon.y + dy;
         const hx = mon.hx ?? mon.x, hy = mon.hy ?? mon.y;
-        if (Math.hypot(nx - hx, ny - hy) > 3) continue;
-        if (!(m.ground[ny] && m.ground[ny][nx] === 3)) continue;
-        if (m.objects[`${nx},${ny}`]) continue;
-        if (monsters.some((o) => o !== mon && o.x === nx && o.y === ny)) continue;
-        mon.x = nx; mon.y = ny;
+        let nearest = null, nearestDist = Infinity;
+        for (const pl of playersHere) {
+          const px = pl.x / W.TILE, py = pl.y / W.TILE;
+          const d = Math.hypot(px - mon.x, py - mon.y);
+          if (d < nearestDist) { nearestDist = d; nearest = { x: Math.round(px), y: Math.round(py) }; }
+        }
+        const distFromHome = Math.hypot(mon.x - hx, mon.y - hy);
+        let next = null;
+        if (nearest && nearestDist <= CHASE_RADIUS && distFromHome <= GIVE_UP_RADIUS) {
+          next = stepToward(mon, nearest.x, nearest.y);
+        } else if (distFromHome > LEASH_RADIUS) {
+          next = stepToward(mon, hx, hy);
+        } else if (Math.random() <= 0.5) {
+          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
+          const nx = mon.x + dx, ny = mon.y + dy;
+          if (Math.hypot(nx - hx, ny - hy) <= LEASH_RADIUS && isFree(nx, ny, mon)) next = [nx, ny];
+        }
+        if (!next) continue;
+        mon.x = next[0]; mon.y = next[1];
         this.dirty = true;
         this.emitMap(mapKey, 'monster', { id: mon.id, monster: mon });
       }

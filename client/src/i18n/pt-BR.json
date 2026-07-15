@@ -128,6 +128,8 @@
   "err.reconnected": "Reconectado! ✅",
   "err.out_of_range": "Longe demais — chegue mais perto do monstro.",
   "err.fainted": "Você desmaiou na mina e foi levado pra casa...",
+  "err.stairs_hidden": "A escada ainda está escondida — minere as pedras pra encontrá-la.",
+  "mine.stairsFound": "⛏️ Você encontrou a escada escondida!",
 
   "item.wood": "Madeira",
   "item.stone": "Pedra",

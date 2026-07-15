@@ -96,8 +96,8 @@ export function startGame(farm) {
 // (troca de tela), senão os handlers da cena antiga ficariam duplicados no socket.
 const GAME_EVENTS = [
   'playerJoined', 'playerLeft', 'playerMoved', 'playerAppearance', 'chat', 'tile', 'object',
-  'egg', 'forage', 'monster', 'discovered', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
-  'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect', 'connect',
+  'egg', 'forage', 'monster', 'monsterAttack', 'discovered', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
+  'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect', 'connect', 'stairsRevealed',
 ];
 
 class GameScene extends Phaser.Scene {
@@ -229,6 +229,10 @@ class GameScene extends Phaser.Scene {
     this.bugs = d.bugs || {};
     this.tilesState = d.state.tiles;
     this.objectsState = d.state.objects;
+    // Escada escondida (mina): true na maioria dos mapas (só a mina esconde) — controla
+    // se a escada de descida já foi revelada (minerando a pedra especial) e portanto se
+    // dá pra renderizar/usar o tile como saída.
+    this.stairsRevealed = d.state.stairsRevealed !== false;
     this.buildingsState = d.state.buildings || [];
     this.buildingDefs = d.world.buildingDefs || {};
     this.me = d.you.userId;
@@ -631,6 +635,11 @@ class GameScene extends Phaser.Scene {
   // overworld já é o prédio mine_entrance). Registra os tiles pra interação (E → trocar).
   buildEntrances() {
     for (const e of this.entrances) {
+      // A escada de DESCIDA fica escondida numa pedra especial até ser minerada (ver
+      // `stairsRevealed`) — não desenha o sprite de escada enquanto isso não acontece,
+      // senão entregaria a posição de graça. A pedra em si já aparece via objectsState
+      // normal (é só um 'rock' com hp mais alto, sem sprite diferenciado de propósito).
+      if (e.kind === 'ladder_down' && !this.stairsRevealed) continue;
       if (e.kind === 'ladder_up' || e.kind === 'ladder_down') {
         const [x, y] = e.at;
         this.add.image(x * T, y * T, 'ladder').setOrigin(0).setDepth(y * T + 2);
@@ -880,6 +889,23 @@ class GameScene extends Phaser.Scene {
     this.monsterSprites.delete(id);
   }
 
+  // Animação de ataque do monstro (pedido explícito do usuário) — o pack só tem o frame
+  // idle extraído pros monstros, sem pose de ataque dedicada, então o golpe é sinalizado
+  // por um solavanco (angle, NÃO x/y — esse já é controlado pelo moveTween de posição,
+  // mexer nele aqui ia conflitar) + um pequeno impacto vermelho que nasce e desaparece
+  // rápido. Disparado pelo evento 'monsterAttack' (rooms.js emite a cada monstro que
+  // efetivamente acertou o jogador naquele tick de combate).
+  monsterAttackCue(id) {
+    const e = this.monsterSprites.get(id);
+    if (!e) return;
+    this.tweens.add({ targets: e.sprite, angle: { from: -10, to: 0 }, duration: 150, ease: 'Quad.out' });
+    const fx = this.add.circle(e.sprite.x, e.sprite.y - e.sprite.displayHeight / 2, 3, 0xff4444).setDepth(99996);
+    this.tweens.add({
+      targets: fx, radius: 11, alpha: 0, duration: 220, ease: 'Quad.out',
+      onComplete: () => fx.destroy(),
+    });
+  }
+
   updateMonster(id, m) {
     if (!m) { this.despawnMonster(id); return; }
     const e = this.monsterSprites.get(id);
@@ -1088,7 +1114,7 @@ class GameScene extends Phaser.Scene {
     this.keys = this.input.keyboard.addKeys({
       up: K.W, down: K.S, left: K.A, right: K.D,
       up2: K.UP, down2: K.DOWN, left2: K.LEFT, right2: K.RIGHT,
-      interact: K.E, action: K.SPACE, chat: K.ENTER, esc: K.ESC,
+      interact: K.E, action: K.SPACE, chat: K.ENTER, esc: K.ESC, block: K.SHIFT,
     });
     this.input.keyboard.on('keydown', (ev) => {
       if (this.hud.chatFocused()) return;
@@ -1215,6 +1241,14 @@ class GameScene extends Phaser.Scene {
   flashDamage() {
     this.damageRect.setAlpha(0.35);
     this.tweens.add({ targets: this.damageRect, alpha: 0, duration: 300, ease: 'Quad.out' });
+  }
+
+  // Ícone do escudo flutuando sobre o jogador enquanto o bloqueio ativo está segurado
+  // (ver check de `this.blocking` no update()) — feedback claro de "isso está fazendo
+  // alguma coisa agora", não só uma redução de dano invisível.
+  setBlockVisual(on) {
+    if (!this.blockIcon) this.blockIcon = this.add.image(0, 0, 'tool_shield').setScale(0.55).setDepth(99997).setVisible(false);
+    this.blockIcon.setVisible(on);
   }
 
   doAction(tx, ty, worldX, worldY) {
@@ -1368,6 +1402,7 @@ class GameScene extends Phaser.Scene {
     // na coluna (tem que estar literalmente EM FRENTE, não do lado) — mina/escada/borda
     // continuam com folga de 1 tile (vãos maiores, sem essa exigência de "de frente").
     for (const e of this.entrances) {
+      if (e.kind === 'ladder_down' && !this.stairsRevealed) continue; // ainda escondida na pedra
       const tolX = e.kind === 'door' ? 0 : 1;
       if (Math.abs(px - e.at[0]) <= tolX && Math.abs(py - e.at[1]) <= 1) { this.socket.emit('enterMap'); return; }
     }
@@ -1414,7 +1449,14 @@ class GameScene extends Phaser.Scene {
     s.on('egg', ({ key, egg }) => { if (egg) this.eggsState[key] = egg; else delete this.eggsState[key]; this.setEgg(key, egg); });
     s.on('forage', ({ key, item }) => { if (item) this.forageState[key] = item; else delete this.forageState[key]; this.setForage(key, item); });
     s.on('monster', ({ id, monster }) => { if (monster) this.monstersState[id] = monster; else delete this.monstersState[id]; this.updateMonster(id, monster); });
+    s.on('monsterAttack', ({ id }) => this.monsterAttackCue(id));
     s.on('discovered', (d) => this.hud.setDiscovered(d));
+    s.on('stairsRevealed', ({ at }) => {
+      this.stairsRevealed = true;
+      const ent = this.entrances.find((e) => e.kind === 'ladder_down');
+      if (ent) this.add.image(ent.at[0] * T, ent.at[1] * T, 'ladder').setOrigin(0).setDepth(ent.at[1] * T + 2);
+      this.hud.toast(t('mine.stairsFound'));
+    });
     s.on('animals', ({ animals }) => this.setAnimals(animals));
     s.on('building', ({ building }) => {
       this.buildingsState.push(building);
@@ -1503,6 +1545,24 @@ class GameScene extends Phaser.Scene {
       me.container.setDepth(me.container.y);
     }
 
+    // Bloqueio ATIVO com escudo: só reduz dano de contato enquanto segura Shift E o
+    // escudo está selecionado no hotbar — antes era passivo (só por ter equipado, sempre
+    // ativo), pedido explícito do usuário pra virar uma ação de verdade. Emite só quando
+    // o estado MUDA (não todo frame) pra não spammar o socket.
+    {
+      const selected = this.hud.selectedItem();
+      const wantBlock = !this.hud.chatFocused() && !this.hud.anyModalOpen() && !this.buildMode &&
+        this.keys.block.isDown && selected && selected.id === 'shield';
+      if (wantBlock !== this.blocking) {
+        this.blocking = wantBlock;
+        this.socket.emit('block', wantBlock);
+        this.setBlockVisual(wantBlock);
+      }
+      if (this.blocking && this.blockIcon) {
+        this.blockIcon.setPosition(me.container.x, me.container.y - 30).setDepth(me.container.y + 2);
+      }
+    }
+
     // Travessia de borda do mapa (edge_*) dispara sozinha ao encostar — diferente de
     // porta/escada/mina, que continuam exigindo E (tela cheia de conteúdo, o jogador
     // pode só estar passando perto sem querer entrar). `_enteringMap` evita reemitir a
@@ -1566,6 +1626,7 @@ class GameScene extends Phaser.Scene {
     const px = Math.floor(me.container.x / T), py = Math.floor(me.container.y / T);
     let hint = null;
     for (const e of this.entrances) {
+      if (e.kind === 'ladder_down' && !this.stairsRevealed) continue; // ainda escondida na pedra
       if (Math.abs(px - e.at[0]) <= 1 && Math.abs(py - e.at[1]) <= 1) {
         hint = t(`interact.${e.kind === 'ladder_up' ? 'up' : e.kind === 'ladder_down' ? 'down' : e.kind === 'shortcut' ? 'shortcut' : 'enter'}`);
         break;

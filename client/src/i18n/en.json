@@ -128,6 +128,8 @@
   "err.reconnected": "Reconnected! ✅",
   "err.out_of_range": "Too far — get closer to the monster.",
   "err.fainted": "You fainted in the mine and were carried home...",
+  "err.stairs_hidden": "The stairs are still hidden — mine the rocks to find them.",
+  "mine.stairsFound": "⛏️ You found the hidden stairs!",
 
   "item.wood": "Wood",
   "item.stone": "Stone",

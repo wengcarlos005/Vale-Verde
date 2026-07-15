@@ -529,6 +529,14 @@ function makeMineLevel(seed, depth) {
     (shortcutAt && Math.abs(x - shortcutAt[0]) <= 1 && Math.abs(y - shortcutAt[1]) <= 1);
   const floorAndFree = (x, y) => isFloor(x, y) && ground[y][x] === 3 && !objects[`${x},${y}`] && !reserved(x, y);
 
+  // Escada escondida (mecânica estilo Stardew Valley, pedido explícito do usuário): em
+  // vez de uma escada sempre visível, o tile de descida esconde uma pedra especial —
+  // minerá-la revela a escada de verdade (ver `stairsRevealed`/onAction 'mine' em
+  // rooms.js). HP um pouco mais alto que pedra normal (5, contra 3) pra sinalizar que é
+  // "diferente" sem precisar de sprite próprio. `reserved()` já garante que nada mais
+  // (minério/monstro) nasce nesse tile.
+  objects[`${down[0]},${down[1]}`] = { type: 'rock', hp: 5, hidesStairs: true };
+
   // Lista embaralhada de tiles de chão candidatos — formas finas (corredor em S, cruz)
   // têm baixa taxa de acerto pra amostragem aleatória "às cegas" (a maior parte da caixa
   // delimitadora é parede), então em vez de sortear (x,y) e tentar de novo até um limite
