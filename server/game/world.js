@@ -534,12 +534,22 @@ function makeMineLevel(seed, depth) {
   const floorAndFree = (x, y) => isFloor(x, y) && ground[y][x] === 3 && !objects[`${x},${y}`] && !reserved(x, y);
 
   // Escada escondida (mecânica estilo Stardew Valley, pedido explícito do usuário): em
-  // vez de uma escada sempre visível, o tile de descida esconde uma pedra especial —
-  // minerá-la revela a escada de verdade (ver `stairsRevealed`/onAction 'mine' em
-  // rooms.js). HP um pouco mais alto que pedra normal (5, contra 3) pra sinalizar que é
-  // "diferente" sem precisar de sprite próprio. `reserved()` já garante que nada mais
-  // (minério/monstro) nasce nesse tile.
-  objects[`${down[0]},${down[1]}`] = { type: 'rock', hp: 5, hidesStairs: true };
+  // vez de uma escada sempre visível, o tile de descida esconde um minério comum —
+  // minerá-lo revela a escada de verdade (ver `stairsRevealed`/onAction 'mine' em
+  // rooms.js). `reserved()` já garante que nada mais (minério de verdade/monstro) nasce
+  // nesse tile.
+  // BUG REAL achado testando ao vivo (usuário: "pedras invisíveis bloqueando o caminho,
+  // os pixels de bloqueio estão mal feitos"): usava `type:'rock'` antes, mas o sprite de
+  // pedra (`rock.png`) é um frame de 32x32 — o DOBRO do tile de colisão (16x16). Ancorado
+  // embaixo-centro, ele sangra 8px pra cada lado (metade dos tiles vizinhos) e 16px pra
+  // CIMA (cobre o tile inteiro ACIMA dele visualmente, mesmo esse tile sendo andável de
+  // verdade) — confirmado medindo os bounds reais do sprite ao vivo no navegador. Em
+  // campo aberto isso nunca incomodou (pedra cercada de grama vazia), mas na mina, onde
+  // cada tile importa, criava exatamente esse "bloqueio no lugar errado". `ore_*.png` é
+  // 16x16 EXATO (bounds bateram perfeito com o tile nos testes), então trocar o tipo pra
+  // 'ore' resolve o desalinhamento de graça — e também disfarça melhor a pedra especial
+  // (parece minério normal, não um objeto "diferente" chamando atenção).
+  objects[`${down[0]},${down[1]}`] = { type: 'ore', mineral: 'iron', hp: 5, hidesStairs: true };
 
   // Lista embaralhada de tiles de chão candidatos — formas finas (corredor em S, cruz)
   // têm baixa taxa de acerto pra amostragem aleatória "às cegas" (a maior parte da caixa

@@ -188,6 +188,19 @@ class GameScene extends Phaser.Scene {
     for (const wp of ['sword', 'spear', 'bow', 'shield']) L.image(`tool_${wp}`, `/assets/icons/tool_${wp}.png`);
     L.image('tool_rod', '/assets/icons/tool_rod.png');
     L.image('tool_net', '/assets/icons/tool_net.png');
+    // Ícones genéricos pra itens LARGADOS no chão (tecla Q, ver dropSelected/setForage) —
+    // cultivo colhido, semente, peixe/inseto (ícone genérico compartilhado, mesma
+    // simplificação já usada no HUD) e o único item fabricado sem sprite de mundo
+    // dedicado (cerca — arma/vara/rede reaproveitam os `tool_*` já carregados acima).
+    // Recursos base (madeira/pedra/ovo/fruta/cogumelo/minério) já têm sprite de mundo
+    // próprio (forage_*/egg), não precisam de ícone aqui.
+    for (const id of Object.keys(this.data0.crops || {})) {
+      L.image(`icon_${id}`, `/assets/icons/item_${id}.png`);
+      L.image(`icon_seed_${id}`, `/assets/icons/seed_${id}.png`);
+    }
+    L.image('icon_fish', '/assets/icons/item_fish.png');
+    L.image('icon_bug', '/assets/icons/item_bug.png');
+    L.image('icon_fence', '/assets/icons/item_fence.png');
     // Monstros da mina: 4 frames idle cada, mesmo padrão dos outros bichos (chicken etc).
     L.spritesheet('mob_slime_small', '/assets/mob_slime_small.png', { frameWidth: 16, frameHeight: 16 });
     L.spritesheet('mob_slime_medium', '/assets/mob_slime_medium.png', { frameWidth: 32, frameHeight: 32 });
@@ -873,13 +886,27 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // Escolhe a textura pro item largado no chão: sprite de mundo dedicado se existir
+  // (madeira/pedra/minério/fruta/etc — o que já tinha antes), senão cai pro ícone
+  // genérico do item (cultivo/semente/peixe/inseto/cerca) ou reaproveita o ícone de
+  // ferramenta/arma já carregado — cobre QUALQUER item que o jogador largue com Q
+  // (dropSelected), não só os drops de corte/mineração que já existiam.
+  forageTextureFor(type) {
+    if (this.textures.exists(`forage_${type}`)) return `forage_${type}`;
+    if (this.textures.exists(`tool_${type}`)) return `tool_${type}`;
+    if (this.fish && this.fish[type]) return 'icon_fish';
+    if (this.bugs && this.bugs[type]) return 'icon_bug';
+    if (this.textures.exists(`icon_${type}`)) return `icon_${type}`;
+    return 'cursor'; // fallback improvável (item sem ícone pré-carregado) — nunca deixa quebrado
+  }
+
   setForage(key, f) {
     const cur = this.forageSprites.get(key);
     if (f) {
       if (!cur) {
         const [x, y] = key.split(',').map(Number);
         const baseY = y * T + T - 2;
-        const sp = this.add.image(x * T + T / 2, baseY, `forage_${f.type}`).setOrigin(0.5, 1).setDepth(baseY);
+        const sp = this.add.image(x * T + T / 2, baseY, this.forageTextureFor(f.type)).setOrigin(0.5, 1).setDepth(baseY);
         // Drops de corte/mineração (não os forrageáveis nativos berry/mushroom/log, que
         // ficam parados "crescendo" no cenário) flutuam suavemente — deixa claro que é
         // item pra catar, não decoração (pedido do usuário depois de ver os drops parados).
@@ -1183,6 +1210,7 @@ class GameScene extends Phaser.Scene {
       if (ev.key === 'Enter') { ev.preventDefault(); this.hud.focusChat(); }
       if (ev.key.toLowerCase() === 'e') this.tryInteract();
       if (ev.key.toLowerCase() === 'p') this.hud.openProgress();
+      if (ev.key.toLowerCase() === 'q') this.dropSelected();
       if (ev.key === ' ') {
         const me = this.players.get(this.me);
         const fx = Math.floor(me.container.x / T) + (me.dir === 'left' ? -1 : me.dir === 'right' ? 1 : 0);
@@ -1308,6 +1336,19 @@ class GameScene extends Phaser.Scene {
   setBlockVisual(on) {
     if (!this.blockIcon) this.blockIcon = this.add.image(0, 0, 'tool_shield').setScale(0.55).setDepth(99997).setVisible(false);
     this.blockIcon.setVisible(on);
+  }
+
+  // Larga 1 unidade do item selecionado no tile em frente ao jogador (tecla Q) — pedido
+  // explícito ("faça com que ele possa dropar itens"). Ferramentas base (machado/
+  // picareta/enxada/regador) têm `qty:null` no hotbar (não são item de inventário de
+  // verdade, ver hotbarItems em hud.js) — o check abaixo já as exclui sozinho.
+  dropSelected() {
+    const selected = this.hud.selectedItem();
+    if (!selected || !selected.qty) return;
+    const me = this.players.get(this.me);
+    const fx = Math.floor(me.container.x / T) + (me.dir === 'left' ? -1 : me.dir === 'right' ? 1 : 0);
+    const fy = Math.floor(me.container.y / T) + (me.dir === 'up' ? -1 : me.dir === 'down' ? 1 : 0);
+    this.socket.emit('drop', { item: selected.id, x: fx, y: fy });
   }
 
   doAction(tx, ty, worldX, worldY) {

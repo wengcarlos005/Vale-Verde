@@ -8,7 +8,10 @@ const DAY_END = 26 * 60;           // 2:00 (apaga de exaustão)
 const REAL_DAY_MS = 15 * 60 * 1000; // 1 dia de jogo = 15 min reais
 const MIN_PER_TICK = (DAY_END - DAY_START) / (REAL_DAY_MS / 1000); // por segundo
 
-const ENERGY_MAX = 100;
+// Aumentado de 100→150 (usuário: "energia tá acabando rápido, dê mais energia pro
+// boneco") — ~50% mais ações por dia antes de precisar comer/dormir, sem mexer no custo
+// de cada ação individual (COST abaixo continua igual).
+const ENERGY_MAX = 150;
 const HEALTH_MAX = 100;
 const COST = { till: 2, water: 1, plant: 1, harvest: 1, chop: 2, mine: 2, place: 1, fish: 3, catch: 2 };
 
@@ -851,6 +854,32 @@ class Room {
     const inv = this.inv(p.userId);
     const item = data && data.item ? String(data.item) : null;
     inv.equipped = (item && WEAPON_STATS[item]) ? item : null;
+  }
+
+  // Largar 1 unidade do item selecionado no chão, no tile em frente ao jogador — pedido
+  // explícito ("faça com que ele possa dropar itens"). Reaproveita EXATAMENTE o mesmo
+  // container `forage` que os drops de corte/mineração já usam (mesmo mecanismo de
+  // "passar por cima ou clicar pra pegar"), então qualquer jogador (o mesmo ou um amigo,
+  // cooperativo) pode recolher depois. Ferramentas base (machado/picareta/enxada/
+  // regador) não têm entrada em `inv.items` (são sempre disponíveis, não é um item de
+  // verdade no inventário — ver newInventory), então o check `inv.items[itemId]` já as
+  // exclui sozinho, sem precisar de uma lista de bloqueio separada.
+  onDrop(socket, data) {
+    const p = this.players.get(socket.id);
+    if (!p || !data) return;
+    const itemId = String(data.item || '');
+    const inv = this.inv(p.userId);
+    if (!inv.items[itemId] || inv.items[itemId] < 1) return;
+    const x = Math.floor(data.x), y = Math.floor(data.y);
+    const m = this.mapOf(p.map);
+    if (x < 0 || y < 0 || x >= m.w || y >= m.h || !this.near(p, x, y)) return;
+    const key = `${x},${y}`;
+    if (m.forage[key] || m.objects[key]) return; // tile ocupado, não empilha em cima
+    this.addItem(inv, itemId, -1);
+    m.forage[key] = { type: itemId, give: itemId, qty: 1 };
+    this.emitMap(p.map, 'forage', { key, item: m.forage[key] });
+    socket.emit('inv', inv);
+    this.dirty = true;
   }
 
   // Bloqueio ATIVO do escudo — pedido explícito do usuário ("a gente também pode
