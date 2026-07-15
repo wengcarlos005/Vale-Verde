@@ -103,6 +103,31 @@ const BUGS = {
   firefly:   { season: null, sellPrice: 30 },
 };
 
+// Objetivos do menu de Progresso — os `id`/limiares aqui devem ficar em sincronia com
+// `Hud.OBJECTIVES` em hud.js (client), que tem a MESMA lista pra exibição/cascata (client
+// não recebe isso pela rede porque `check` é função, não dado serializável). Servidor usa
+// essa cópia só pra decidir QUANDO pagar a recompensa uma única vez (`state.objectivesDone`
+// em rooms.js) — o `requires` do lado do cliente é só pra ordem de revelação visual, aqui
+// não precisa dele porque `check()` sozinho já implica os pré-requisitos em todo caso (ex.:
+// master_miner exige 3 minérios, o que já cobre first_ore exigir 1).
+const OBJECTIVES = [
+  { id: 'first_harvest', reward: 50, check: (d) => (d.crops || []).length >= 1 },
+  { id: 'first_ore', reward: 50, check: (d) => (d.minerals || []).length >= 1 },
+  { id: 'master_miner', reward: 150, check: (d) => (d.minerals || []).length >= 3 },
+  { id: 'monster_slayer', reward: 100, check: (d) => (d.monsters || []).length >= 1 },
+  { id: 'monster_master', reward: 300, check: (d) => (d.monsters || []).length >= 4 },
+  { id: 'angler', reward: 150, check: (d) => (d.fish || []).length >= 3 },
+  { id: 'bug_collector', reward: 150, check: (d) => (d.bugs || []).length >= 3 },
+  { id: 'deep_diver', reward: 300, check: (d) => (d.maxDepth || 0) >= 10 },
+  { id: 'deep_diver_2', reward: 600, check: (d) => (d.maxDepth || 0) >= 25 },
+  { id: 'master_farmer', reward: 250, check: (d) => (d.crops || []).length >= 6 },
+  {
+    id: 'full_collection', reward: 1000,
+    check: (d) => (d.crops || []).length >= 10 && (d.minerals || []).length >= 3 &&
+      (d.monsters || []).length >= 4 && (d.fish || []).length >= 6 && (d.bugs || []).length >= 6,
+  },
+];
+
 // Pedidos do quadro de recados: só itens sempre obteníveis (não presos à estação).
 const QUEST_POOL = [
   { item: 'wood', qty: 12 },
@@ -127,4 +152,4 @@ function stageOf(crop, daysGrown) {
   return Math.min(3, Math.floor((daysGrown / def.days) * 4));
 }
 
-module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, BUGS, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
+module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, BUGS, OBJECTIVES, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };

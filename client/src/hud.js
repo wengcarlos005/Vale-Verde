@@ -384,20 +384,22 @@ export class Hud {
   // — algumas exigem completar outra ANTES de aparecer disponíveis (`requires`), pedido
   // explícito do usuário ("quero que alguns objetivos sejam desbloqueados em cascata").
   // check(d) recebe o `discovered` da fazenda e devolve se a meta foi cumprida.
+  // reward aqui é só pra EXIBIR (o pagamento de verdade é do servidor, ver OBJECTIVES em
+  // crops.js + checkObjectives em rooms.js — precisa ficar em sincronia com os valores lá).
   static get OBJECTIVES() {
     return [
-      { id: 'first_harvest', requires: [], check: (d) => (d.crops || []).length >= 1 },
-      { id: 'first_ore', requires: [], check: (d) => (d.minerals || []).length >= 1 },
-      { id: 'master_miner', requires: ['first_ore'], check: (d) => (d.minerals || []).length >= 3 },
-      { id: 'monster_slayer', requires: [], check: (d) => (d.monsters || []).length >= 1 },
-      { id: 'monster_master', requires: ['monster_slayer'], check: (d) => (d.monsters || []).length >= 4 },
-      { id: 'angler', requires: [], check: (d) => (d.fish || []).length >= 3 },
-      { id: 'bug_collector', requires: [], check: (d) => (d.bugs || []).length >= 3 },
-      { id: 'deep_diver', requires: [], check: (d) => (d.maxDepth || 0) >= 10 },
-      { id: 'deep_diver_2', requires: ['deep_diver'], check: (d) => (d.maxDepth || 0) >= 25 },
-      { id: 'master_farmer', requires: ['first_harvest'], check: (d) => (d.crops || []).length >= 6 },
+      { id: 'first_harvest', reward: 50, requires: [], check: (d) => (d.crops || []).length >= 1 },
+      { id: 'first_ore', reward: 50, requires: [], check: (d) => (d.minerals || []).length >= 1 },
+      { id: 'master_miner', reward: 150, requires: ['first_ore'], check: (d) => (d.minerals || []).length >= 3 },
+      { id: 'monster_slayer', reward: 100, requires: [], check: (d) => (d.monsters || []).length >= 1 },
+      { id: 'monster_master', reward: 300, requires: ['monster_slayer'], check: (d) => (d.monsters || []).length >= 4 },
+      { id: 'angler', reward: 150, requires: [], check: (d) => (d.fish || []).length >= 3 },
+      { id: 'bug_collector', reward: 150, requires: [], check: (d) => (d.bugs || []).length >= 3 },
+      { id: 'deep_diver', reward: 300, requires: [], check: (d) => (d.maxDepth || 0) >= 10 },
+      { id: 'deep_diver_2', reward: 600, requires: ['deep_diver'], check: (d) => (d.maxDepth || 0) >= 25 },
+      { id: 'master_farmer', reward: 250, requires: ['first_harvest'], check: (d) => (d.crops || []).length >= 6 },
       {
-        id: 'full_collection',
+        id: 'full_collection', reward: 1000,
         requires: ['master_miner', 'monster_master', 'angler', 'bug_collector', 'master_farmer'],
         check: (d) => (d.crops || []).length >= 10 && (d.minerals || []).length >= 3 &&
           (d.monsters || []).length >= 4 && (d.fish || []).length >= 6 && (d.bugs || []).length >= 6,
@@ -417,7 +419,7 @@ export class Hud {
       const status = isDone ? '✅' : locked ? '🔒' : '▫️';
       const hint = locked ? `<div class="obj-hint">${t('objectives.lockedBy', { name: t(`objectives.${lockedBy}.title`) })}</div>` : '';
       return `<div class="obj-item ${cls}">
-        <div class="obj-title">${status} ${escapeHtml(t(`objectives.${o.id}.title`))}</div>
+        <div class="obj-title">${status} ${escapeHtml(t(`objectives.${o.id}.title`))} <span class="obj-reward">💰${o.reward}</span></div>
         <div class="obj-desc">${escapeHtml(t(`objectives.${o.id}.desc`))}</div>
         ${hint}
       </div>`;

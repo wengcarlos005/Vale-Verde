@@ -1,6 +1,6 @@
 // Salas de jogo: uma por fazenda, servidor autoritativo.
 const { stmts } = require('../db');
-const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, BUGS, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
+const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, BUGS, OBJECTIVES, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
 const W = require('./world');
 
 const DAY_START = 6 * 60;          // 6:00
@@ -72,6 +72,7 @@ class Room {
     if (!this.state.discovered) this.state.discovered = { crops: [], minerals: [], monsters: [], fish: [], bugs: [], maxDepth: 0 };
     if (!this.state.discovered.fish) this.state.discovered.fish = []; // migração: menu de progresso ganhou peixe depois
     if (!this.state.discovered.bugs) this.state.discovered.bugs = []; // migração: menu de progresso ganhou inseto depois
+    if (!this.state.objectivesDone) this.state.objectivesDone = []; // migração: menu de progresso ganhou objetivos com recompensa depois
     // migração: fazenda que já existia antes da carta da avó — trata como "já mostrada"
     // (senão um jogador estabelecido veria a introdução de "fazenda nova" do nada).
     if (this.state.introShown == null) this.state.introShown = true;
@@ -93,6 +94,11 @@ class Room {
     // vivo sem virar perseguição (ainda é passo aleatório dentro da coleira).
     this.monsterTickTimer = setInterval(() => this.tickMonsters(), 350);
     this.lastTimeBroadcast = 0;
+    // Credita retroativamente fazendas que JÁ tinham descoberto coisas suficientes pra
+    // completar um objetivo antes dele existir (ex.: fazenda antiga que já tinha os 3
+    // minérios) — é uma conquista real, só não tinha recompensa ainda. Silencioso (sem
+    // emit de farm-wide aqui, ninguém conectado pra ver o toast de qualquer forma).
+    this.checkObjectives(false);
   }
 
   // ---------- helpers ----------
@@ -278,6 +284,28 @@ class Room {
     list.push(id);
     this.dirty = true;
     this.emit('discovered', this.state.discovered);
+    this.checkObjectives();
+  }
+
+  // Paga a recompensa de cada objetivo (OBJECTIVES em crops.js) que acabou de ser
+  // cumprido pela primeira vez — `check()` sozinho decide (já implica qualquer
+  // pré-requisito, ver comentário em crops.js). `announce=false` é usado só na migração
+  // de fazenda antiga (créditos retroativos por descobertas que já existiam antes desse
+  // sistema existir — não faz sentido mostrar toast de "acabou de completar" pra algo
+  // que já tinha acontecido há muito tempo).
+  checkObjectives(announce = true) {
+    const s = this.state;
+    for (const o of OBJECTIVES) {
+      if (s.objectivesDone.includes(o.id)) continue;
+      if (!o.check(s.discovered)) continue;
+      s.objectivesDone.push(o.id);
+      s.money += o.reward;
+      this.dirty = true;
+      if (announce) {
+        this.emit('objectiveComplete', { id: o.id, reward: o.reward });
+        this.emit('money', { money: s.money });
+      }
+    }
   }
 
   near(player, x, y) {
@@ -340,7 +368,11 @@ class Room {
     p.dir = 'down'; p.anim = 'idle'; p.sleeping = false;
     if (p.map.startsWith('mine:')) {
       const depth = W.depthOf(p.map);
-      if (depth > this.state.discovered.maxDepth) { this.state.discovered.maxDepth = depth; this.emit('discovered', this.state.discovered); }
+      if (depth > this.state.discovered.maxDepth) {
+        this.state.discovered.maxDepth = depth;
+        this.emit('discovered', this.state.discovered);
+        this.checkObjectives(); // maxDepth não passa por discover() — objetivos de profundidade checados aqui
+      }
     }
     socket.join(this.mapChannel(p.map));
     socket.emit('joined', this.mapPayload(p));

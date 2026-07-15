@@ -120,7 +120,7 @@ export function startGame(farm) {
 // (troca de tela), senão os handlers da cena antiga ficariam duplicados no socket.
 const GAME_EVENTS = [
   'playerJoined', 'playerLeft', 'playerMoved', 'playerAppearance', 'chat', 'tile', 'object',
-  'egg', 'forage', 'bug', 'monster', 'monsterAttack', 'discovered', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
+  'egg', 'forage', 'bug', 'monster', 'monsterAttack', 'discovered', 'objectiveComplete', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
   'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect', 'connect', 'stairsRevealed',
 ];
 
@@ -1514,6 +1514,9 @@ class GameScene extends Phaser.Scene {
     s.on('monster', ({ id, monster }) => { if (monster) this.monstersState[id] = monster; else delete this.monstersState[id]; this.updateMonster(id, monster); });
     s.on('monsterAttack', ({ id }) => this.monsterAttackCue(id));
     s.on('discovered', (d) => this.hud.setDiscovered(d));
+    s.on('objectiveComplete', ({ id, reward }) => {
+      this.hud.toast(t('objectives.completeToast', { name: t(`objectives.${id}.title`), reward }), 4000);
+    });
     s.on('stairsRevealed', ({ at }) => {
       this.stairsRevealed = true;
       const ent = this.entrances.find((e) => e.kind === 'ladder_down');

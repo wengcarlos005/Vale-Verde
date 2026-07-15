@@ -81,6 +81,7 @@
   "intro.close": "Vamos começar",
 
   "progress.objectives": "🎯 Objetivos",
+  "objectives.completeToast": "🎯 Objetivo completo: {name}! +💰{reward}",
   "objectives.lockedBy": "Complete antes: {name}",
   "objectives.first_harvest.title": "Primeira Colheita",
   "objectives.first_harvest.desc": "Colha seu primeiro cultivo",
