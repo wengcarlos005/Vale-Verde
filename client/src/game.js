@@ -156,6 +156,8 @@ class GameScene extends Phaser.Scene {
     L.spritesheet('beach', '/assets/beach.png', { frameWidth: T, frameHeight: T });
     L.spritesheet('sand_decor', '/assets/sand_decor.png', { frameWidth: T, frameHeight: T });
     L.image('cavewall', '/assets/cavewall.png');
+    L.image('cavewall2', '/assets/cavewall2.png');
+    L.image('cave_lantern', '/assets/cave_lantern.png');
     L.image('mine_entrance', '/assets/mine_entrance.png');
     L.image('ladder', '/assets/ladder.png');
     L.image('interior_floor', '/assets/interior_floor.png');
@@ -807,7 +809,16 @@ class GameScene extends Phaser.Scene {
       const mask = f(x, y - 1) | (f(x + 1, y) << 1) | (f(x, y + 1) << 2) | (f(x - 1, y) << 3);
       sprite = this.add.image(x * T, y * T, 'fence', FENCE_MAP[mask]).setOrigin(0).setDepth(by);
     } else if (obj.type === 'cavewall') {
-      sprite = this.add.image(cx, by, 'cavewall').setOrigin(0.5, 1).setDepth(by);
+      // Variedade de parede (usuário: "está usando o mesmo tipo de parede, existem mais
+      // de 10 sprites de parede pra mina") — alterna entre 2 texturas por hash
+      // determinístico de posição (mesmo padrão já usado em bushes/árvore) + lampião
+      // decorativo raro sobreposto. Tudo client-only: servidor continua mandando um
+      // único type:'cavewall' pra toda parede, a variedade é só de apresentação.
+      const wallTex = (x * 11 + y * 17) % 100 < 35 ? 'cavewall2' : 'cavewall';
+      sprite = this.add.image(cx, by, wallTex).setOrigin(0.5, 1).setDepth(by);
+      if ((x * 13 + y * 7) % 100 < 7) {
+        this.add.image(cx, by - 18, 'cave_lantern').setOrigin(0.5, 1).setDepth(by + 1);
+      }
     } else if (obj.type === 'stone_wall') {
       sprite = this.add.image(x * T, y * T, 'stone_wall').setOrigin(0).setDepth(by);
     } else if (obj.type === 'ore') {

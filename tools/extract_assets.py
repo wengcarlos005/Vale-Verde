@@ -151,6 +151,17 @@ load(p("Buildings", "Buildings", "Houses", "Stone", "House_3_Stone_Base_Blue.png
 # ---------- mina e praia (Fase C, mundo completo) ----------
 load(p("Tiles", "Cave", "Cave_Floor_1.png")).crop((0, 0, 16, 16)).save(o("cave_floor.png"))
 load(p("Tiles", "Cave", "Cave_Walls.png")).crop((16, 96, 32, 128)).save(o("cavewall.png"))  # parede/viga, 16x32
+# Variedade de parede (usuário: "está usando o mesmo tipo de parede, existem mais de 10
+# sprites de parede pra mina") — Cave_Walls.png tem DOIS tons/padrões da mesma textura de
+# viga (claro à esquerda = cavewall.png de sempre, mais nodoso à direita); cliente alterna
+# entre os dois por hash de posição (ver spawnObject em game.js), sem mudar nada no
+# servidor (continua um único type:'cavewall').
+load(p("Tiles", "Cave", "Cave_Walls.png")).crop((72, 96, 88, 128)).save(o("cavewall2.png"))
+# Lampião decorativo (recorte de Cave_Wall_Support.png, achado por grade de depuração —
+# a viga de madeira em si não usamos, só a lanterna pendurada) — sobreposto em ALGUMAS
+# paredes de borda pra dar vida/iluminação, puramente visual (cliente decide onde, sem
+# estado novo no servidor).
+load(p("Tiles", "Cave", "Cave_Wall_Support.png")).crop((49, 8, 65, 24)).save(o("cave_lantern.png"))
 # Praia: blob autotile de areia/água (mesma família do Grass_Tiles_2 do lago). Sheet
 # 30x3; uso os frames do bloco 3x3 de "ilha de areia" (cols 0-2 = bordas/cantos convexos
 # com foam) + o buraco d'água (cols 3-4 = cantos côncavos/notch). Frame idx = row*30+col.

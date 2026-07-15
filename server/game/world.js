@@ -533,24 +533,6 @@ function makeMineLevel(seed, depth) {
     (shortcutAt && Math.abs(x - shortcutAt[0]) <= 1 && Math.abs(y - shortcutAt[1]) <= 1);
   const floorAndFree = (x, y) => isFloor(x, y) && ground[y][x] === 3 && !objects[`${x},${y}`] && !reserved(x, y);
 
-  // Escada escondida (mecânica estilo Stardew Valley, pedido explícito do usuário): em
-  // vez de uma escada sempre visível, o tile de descida esconde um minério comum —
-  // minerá-lo revela a escada de verdade (ver `stairsRevealed`/onAction 'mine' em
-  // rooms.js). `reserved()` já garante que nada mais (minério de verdade/monstro) nasce
-  // nesse tile.
-  // BUG REAL achado testando ao vivo (usuário: "pedras invisíveis bloqueando o caminho,
-  // os pixels de bloqueio estão mal feitos"): usava `type:'rock'` antes, mas o sprite de
-  // pedra (`rock.png`) é um frame de 32x32 — o DOBRO do tile de colisão (16x16). Ancorado
-  // embaixo-centro, ele sangra 8px pra cada lado (metade dos tiles vizinhos) e 16px pra
-  // CIMA (cobre o tile inteiro ACIMA dele visualmente, mesmo esse tile sendo andável de
-  // verdade) — confirmado medindo os bounds reais do sprite ao vivo no navegador. Em
-  // campo aberto isso nunca incomodou (pedra cercada de grama vazia), mas na mina, onde
-  // cada tile importa, criava exatamente esse "bloqueio no lugar errado". `ore_*.png` é
-  // 16x16 EXATO (bounds bateram perfeito com o tile nos testes), então trocar o tipo pra
-  // 'ore' resolve o desalinhamento de graça — e também disfarça melhor a pedra especial
-  // (parece minério normal, não um objeto "diferente" chamando atenção).
-  objects[`${down[0]},${down[1]}`] = { type: 'ore', mineral: 'iron', hp: 5, hidesStairs: true };
-
   // Lista embaralhada de tiles de chão candidatos — formas finas (corredor em S, cruz)
   // têm baixa taxa de acerto pra amostragem aleatória "às cegas" (a maior parte da caixa
   // delimitadora é parede), então em vez de sortear (x,y) e tentar de novo até um limite
@@ -570,8 +552,11 @@ function makeMineLevel(seed, depth) {
   // então reservar o espaço deles antes evita que o minério — cuja contagem-alvo escala
   // só com a profundidade, não com a forma do nível — encha um corredor fino inteiro e
   // não sobre vaga nenhuma pra monstro (bug real visto num formato de corredor estreito).
+  // Contagens aumentadas bastante (usuário: "as fases ainda estão muito fáceis, tem que
+  // ter muito mais pedra e minério e monstro") — quase dobrado em relação ao que tinha
+  // antes, tanto na contagem-alvo quanto no teto de espaço que cada um pode ocupar.
   const tier = monsterTierFor(depth);
-  const monsterCount = Math.min(9, 2 + Math.floor(depth / 2));
+  const monsterCount = Math.min(20, 5 + Math.floor(depth * 1.5));
   const monsters = {};
   let placedM = 0, nextId = 1;
   for (const [x, y] of candidates) {
@@ -585,24 +570,54 @@ function makeMineLevel(seed, depth) {
     placedM++;
   }
 
-  // Minério: usa o que sobrou dos candidatos, com um teto (~45% do chão) pra sempre
-  // sobrar espaço de passagem mesmo num formato bem apertado. Exclui os tiles onde já
-  // colocamos monstro — sem isso, minério podia nascer EM CIMA de um monstro (mesmo
-  // tile), os dois sprites empilhados ficando com aparência de cenário quebrado/cortado.
-  const monsterPos = new Set(Object.values(monsters).map((mo) => `${mo.x},${mo.y}`));
+  // Minério: usa o que sobrou dos candidatos, com um teto bem mais alto que antes (70%
+  // do chão, era 45%) — ainda sobra passagem em formatos apertados, mas a mina fica bem
+  // mais cheia. Exclui os tiles onde já colocamos monstro — sem isso, minério podia
+  // nascer EM CIMA de um monstro (mesmo tile), os dois sprites empilhados ficando com
+  // aparência de cenário quebrado/cortado. Espaçamento entre minérios foi de 1 tile de
+  // respiro pra 0 (grudado é permitido) — é isso que deixa a mina parecer de verdade
+  // cheia de minério em vez de pontilhada.
+  // BUG REAL achado testando (chase ficava travado, distância nunca diminuía): checar só
+  // o tile EXATO do monstro não bastava — com espaçamento 0, minério podia cercar um
+  // monstro nos 4 lados (ele nasce sem casa livre pra sair, "preso na própria toca").
+  // nearMonster reserva um raio de 1 tile ao redor de cada monstro livre de minério,
+  // garantindo pelo menos uma rota de fuga/perseguição em qualquer direção.
+  const nearMonster = (x, y) => {
+    for (const mo of Object.values(monsters)) {
+      if (Math.abs(mo.x - x) <= 1 && Math.abs(mo.y - y) <= 1) return true;
+    }
+    return false;
+  };
   const oreCounts = mineOreCounts(depth);
-  const oreCap = Math.max(6, Math.floor(candidates.length * 0.45));
+  const oreCap = Math.max(15, Math.floor(candidates.length * 0.7));
   let oreBudgetLeft = oreCap;
   for (const [mineral, count] of oreCounts) {
     let placed = 0;
     const target = Math.min(count, oreBudgetLeft);
     for (const [x, y] of candidates) {
       if (placed >= target) break;
-      if (!floorAndFree(x, y) || hasNearbyContent(scatterState, x, y) || monsterPos.has(`${x},${y}`)) continue;
+      if (!floorAndFree(x, y) || hasNearbyContent(scatterState, x, y, 0) || nearMonster(x, y)) continue;
       objects[`${x},${y}`] = { type: 'ore', mineral, hp: 3 };
       placed++;
     }
     oreBudgetLeft -= placed;
+  }
+
+  // Escada escondida (mecânica estilo Stardew Valley): em vez de um objeto especial
+  // separado (óbvio de identificar — usuário: "a pedra que contém a saída é diferente
+  // das demais e é óbvia"), escolhe um minério JÁ COLOCADO, ao acaso, entre TODOS os
+  // minérios do nível (não mais preso a uma posição fixa perto do canto de descida) e
+  // marca ele como o segredo — visualmente e mecanicamente 100% idêntico a qualquer
+  // outro minério do mesmo tipo, só o servidor sabe qual é (ver `hidesStairs` em
+  // onAction 'mine', rooms.js). Fallback pro comportamento antigo (posição fixa) só no
+  // caso extremo de um nível sem minério nenhum (não deveria acontecer, oreCap mínimo
+  // é 15).
+  const oreKeys = Object.keys(objects).filter((k) => objects[k].type === 'ore');
+  if (oreKeys.length) {
+    const secretKey = oreKeys[Math.floor(rnd() * oreKeys.length)];
+    objects[secretKey].hidesStairs = true;
+  } else {
+    objects[`${down[0]},${down[1]}`] = { type: 'ore', mineral: 'iron', hp: 5, hidesStairs: true };
   }
 
   const nextUp = mineLadderPositions(depth + 1).up;

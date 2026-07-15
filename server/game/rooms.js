@@ -174,15 +174,27 @@ class Room {
         const saved = this.state.maps[mapKey];
         if (saved.monsters == null) saved.monsters = gen.monsters || {}; // migração: mapa salvo antes do sistema de combate
         if (saved.bugs == null) saved.bugs = {}; // migração: mapa salvo antes da caça de insetos ganhar entidades visíveis
-        // Migração: níveis de mina salvos ANTES da escada escondida não têm a pedra
-        // especial no tile de descida (a escada sempre esteve visível ali) — considera
-        // já revelada nesse caso, pra não trancar quem já tinha chegado lá. Só fica
-        // escondida se o objeto com `hidesStairs:true` realmente existir (nível gerado
-        // DEPOIS desta mudança).
+        // Migração: níveis de mina salvos ANTES da escada escondida não têm nenhum
+        // objeto com `hidesStairs:true` (a escada sempre esteve visível) — considera
+        // já revelada nesse caso, pra não trancar quem já tinha chegado lá. Busca em
+        // TODOS os objetos (não só no tile de descida), já que a escada escondida hoje
+        // fica num minério aleatório, não numa posição fixa.
         if (mapKey.startsWith('mine:') && saved.stairsRevealed == null) {
-          const downEnt = entrances.find((e) => e.kind === 'ladder_down');
-          const downObj = downEnt && saved.objects[`${downEnt.at[0]},${downEnt.at[1]}`];
-          saved.stairsRevealed = !(downObj && downObj.hidesStairs);
+          const hasHiddenOre = Object.values(saved.objects).some((o) => o.hidesStairs);
+          saved.stairsRevealed = !hasHiddenOre;
+        }
+        // Migração: níveis salvos entre a criação da escada escondida e a correção do
+        // sprite ainda têm o objeto `hidesStairs` com `type:'rock'` (sprite ÓBVIO — 32x32,
+        // parece uma gema azul destoante de tudo, usuário: "a pedra que contém a saída é
+        // diferente das demais e é óbvia"). Converte pra `type:'ore'` (se ainda não foi
+        // minerado) — mesmo visual de um minério comum, disfarçado de verdade.
+        if (mapKey.startsWith('mine:')) {
+          for (const [okey, o] of Object.entries(saved.objects)) {
+            if (o.hidesStairs && o.type === 'rock') {
+              saved.objects[okey] = { type: 'ore', mineral: 'iron', hp: o.hp || 5, hidesStairs: true };
+              this.dirty = true;
+            }
+          }
         }
         // Migração: níveis de mina gerados antes da correção acima podem ter minério
         // preso no MESMO tile de um monstro (sprites empilhados, aparência de cenário
