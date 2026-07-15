@@ -45,6 +45,10 @@ const BUILDINGS = {
   portovale: [
     { type: 'city_hall',  x: 22, y: 7, w: 9, h: 4, padBottom: 1 }, // calcário bege (sprite 144x128)
     { type: 'city_house', x: 36, y: 8, w: 7, h: 3, padBottom: 1 }, // madeira verde (sprite 112x96)
+    // Chafariz no centro da praça — a praça de terra estava completamente vazia (pedido
+    // do usuário: "reveja o jogo pra ver se está bonito visualmente"; foi o achado mais
+    // claro do reexame — uma "cidade grande" com só 2 prédios numa praça enorme e nua).
+    { type: 'well', x: 34, y: 17, w: 2, h: 1 },
   ],
   // Ramal sul (praia/porto) — tela própria (entrada na borda norte, saída pra
   // Pedreira na borda sul). A mina MOROU pra lá (ver comentário em BUILDINGS.pedreira).
