@@ -82,6 +82,12 @@ class Room {
     this.dirty = false;
     this.channel = `farm:${farm.id}`;
     this.tickTimer = setInterval(() => this.tick(), 1000);
+    // Timer PRÓPRIO pros monstros, mais rápido que o tick de 1s do relógio/combate — preso
+    // ao tick de 1s, o passo mais rápido possível era "1 tile por segundo" mesmo a 100% de
+    // chance, o que lia como "quase parado" perto da velocidade do jogador (95px/s). Um
+    // intervalo mais curto (350ms) com chance por chamada dá movimento visivelmente mais
+    // vivo sem virar perseguição (ainda é passo aleatório dentro da coleira).
+    this.monsterTickTimer = setInterval(() => this.tickMonsters(), 350);
     this.lastTimeBroadcast = 0;
   }
 
@@ -305,7 +311,7 @@ class Room {
 
   get empty() { return this.players.size === 0; }
 
-  destroy() { clearInterval(this.tickTimer); this.save(); }
+  destroy() { clearInterval(this.tickTimer); clearInterval(this.monsterTickTimer); this.save(); }
 
   save() {
     stmts.saveFarmState.run(JSON.stringify(this.state), this.farmId);
@@ -318,7 +324,6 @@ class Room {
     this.state.time += MIN_PER_TICK;
     if (this.state.time >= DAY_END) { this.advanceDay(true); return; }
     this.tickCombat();
-    this.tickMonsters();
     // broadcast do relógio a cada ~10s
     if (Date.now() - this.lastTimeBroadcast > 10000) {
       this.lastTimeBroadcast = Date.now();
@@ -762,16 +767,20 @@ class Room {
 
   // Monstros vagam perto de casa (hx/hy) sem perseguir o jogador de propósito — mantém a
   // decisão original de não ter IA de perseguição (reduz risco/escopo), mas agora o
-  // monstro se move de verdade em vez de ficar 100% parado. Cada tick (1s), chance por
-  // monstro de tentar um passo aleatório; só executa se o destino for piso de caverna
-  // livre (sem parede/minério/outro monstro) e continuar dentro do raio de coleira.
+  // monstro se move de verdade em vez de ficar 100% parado. Roda no próprio timer de
+  // 350ms (não no tick de 1s do relógio/combate — a 1 tile por chamada, um tick de 1s
+  // capava a velocidade em "1 tile/segundo" mesmo a 100% de chance, muito mais lento que
+  // o jogador (95px/s) e lido como "quase parado"). Chance por chamada de tentar um passo
+  // aleatório; só executa se o destino for piso de caverna livre (sem parede/minério/
+  // outro monstro) e continuar dentro do raio de coleira.
   tickMonsters() {
+    if (this.players.size === 0) return;
     for (const [mapKey, m] of Object.entries(this._maps || {})) {
       if (!mapKey.startsWith('mine:') || !m.monsters) continue;
       const monsters = Object.values(m.monsters);
       if (!monsters.length) continue;
       for (const mon of monsters) {
-        if (Math.random() > 0.3) continue;
+        if (Math.random() > 0.5) continue;
         const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
         const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
         const nx = mon.x + dx, ny = mon.y + dy;

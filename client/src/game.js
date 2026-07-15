@@ -312,22 +312,16 @@ class GameScene extends Phaser.Scene {
     this.rebuildPlayerLayers(this.me, app);
 
     // câmera
-    // Mapas menores que o viewport (interiores 11x8, salas da mina) não devem ficar
-    // ancorados no canto superior-esquerdo com o resto da tela em branco — os bounds
-    // do Phaser só "centralizam" quando o mapa preenche o viewport inteiro. Se o mapa é
-    // menor que o viewport num eixo, os bounds desse eixo viram do TAMANHO do viewport
-    // (deslocados pra sobrar metade de cada lado), então a câmera não tem margem pra
-    // rolar e o mapa sempre aparece centralizado, parado — exatamente o efeito desejado
-    // numa sala estática pequena. Mapas grandes (overworld/south/portovale) continuam
-    // com o comportamento de sempre (bounds = mapa, segue o jogador).
-    const zoom = Math.max(2, Math.min(4, Math.round(Math.min(window.innerWidth, window.innerHeight * 1.6) / 320)));
-    const mapW = this.world.width * T, mapH = this.world.height * T;
-    const viewW = window.innerWidth / zoom, viewH = window.innerHeight / zoom;
-    const boundsW = Math.max(mapW, viewW), boundsX = mapW >= viewW ? 0 : (mapW - viewW) / 2;
-    const boundsH = Math.max(mapH, viewH), boundsY = mapH >= viewH ? 0 : (mapH - viewH) / 2;
-    this.cameras.main.setBounds(boundsX, boundsY, boundsW, boundsH);
-    this.cameras.main.setZoom(zoom);
+    this.applyCameraBounds();
     this.cameras.main.startFollow(meP.container, true, 0.15, 0.15);
+    // BUG REAL (usuário: "a mina tá sempre cortada do lado direito"): zoom/bounds só
+    // eram calculados UMA VEZ aqui no create(), a partir do window.innerWidth daquele
+    // instante. O modo de escala do Phaser (Scale.RESIZE) redimensiona o canvas sozinho
+    // sempre que a janela muda de tamanho DEPOIS do boot (maximizar, trocar de monitor,
+    // barra de endereço do celular recolher, etc.) — mas nada recalculava os bounds da
+    // câmera pra acompanhar, sobrando/faltando uma faixa fixa de fundo (cor de fundo da
+    // cena, #1c2b1e) do lado que cresceu. Reescuta 'resize' e reaplica os mesmos cálculos.
+    this.scale.on('resize', () => this.applyCameraBounds());
 
     // tint noturno
     this.nightRect = this.add.rectangle(0, 0, 4000, 4000, 0x0a1030).setOrigin(0).setScrollFactor(0).setDepth(99999).setAlpha(0);
@@ -359,6 +353,25 @@ class GameScene extends Phaser.Scene {
     // mundo pronto: completa a barra e esconde a tela de carregamento após o 1º frame
     loading(100, 'loading.ready');
     this.time.delayedCall(120, hideLoading);
+  }
+
+  // Mapas menores que o viewport (interiores 11x8, salas da mina) não devem ficar
+  // ancorados no canto superior-esquerdo com o resto da tela em branco — os bounds
+  // do Phaser só "centralizam" quando o mapa preenche o viewport inteiro. Se o mapa é
+  // menor que o viewport num eixo, os bounds desse eixo viram do TAMANHO do viewport
+  // (deslocados pra sobrar metade de cada lado), então a câmera não tem margem pra
+  // rolar e o mapa sempre aparece centralizado, parado — exatamente o efeito desejado
+  // numa sala estática pequena. Mapas grandes (overworld/south/portovale) continuam
+  // com o comportamento de sempre (bounds = mapa, segue o jogador). Chamado no create()
+  // E a cada evento 'resize' (ver comentário em create()).
+  applyCameraBounds() {
+    const zoom = Math.max(2, Math.min(4, Math.round(Math.min(window.innerWidth, window.innerHeight * 1.6) / 320)));
+    const mapW = this.world.width * T, mapH = this.world.height * T;
+    const viewW = window.innerWidth / zoom, viewH = window.innerHeight / zoom;
+    const boundsW = Math.max(mapW, viewW), boundsX = mapW >= viewW ? 0 : (mapW - viewW) / 2;
+    const boundsH = Math.max(mapH, viewH), boundsY = mapH >= viewH ? 0 : (mapH - viewH) / 2;
+    this.cameras.main.setBounds(boundsX, boundsY, boundsW, boundsH);
+    this.cameras.main.setZoom(zoom);
   }
 
   buildGround() {
@@ -872,14 +885,15 @@ class GameScene extends Phaser.Scene {
       this.time.delayedCall(80, () => e.sprite.clearTint());
     }
     e.hp = m.hp;
-    // desliza suavemente até a nova posição em vez de teleportar — o servidor manda
-    // um tick por segundo (tickMonsters em rooms.js), então a duração do tween cobre
-    // o intervalo entre broadcasts.
+    // desliza suavemente até a nova posição em vez de teleportar — o servidor manda um
+    // broadcast a cada 350ms (tickMonsters em rooms.js), a duração do tween cobre esse
+    // intervalo (mais rápido que o antigo tick de 1s, senão o monstro lia como "quase
+    // parado" perto da velocidade do jogador).
     const x = m.x * T + T / 2, by = m.y * T + T;
     if (e.sprite.x !== x || e.sprite.y !== by) {
       if (e.moveTween) e.moveTween.stop();
       e.moveTween = this.tweens.add({
-        targets: e.sprite, x, y: by, duration: 900, ease: 'Sine.easeInOut',
+        targets: e.sprite, x, y: by, duration: 320, ease: 'Sine.easeInOut',
         onUpdate: () => {
           e.sprite.setDepth(e.sprite.y);
           e.barBg.setPosition(e.sprite.x, e.sprite.y - e.sprite.displayHeight - 6);
