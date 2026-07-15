@@ -72,6 +72,9 @@ class Room {
     if (!this.state.discovered) this.state.discovered = { crops: [], minerals: [], monsters: [], fish: [], bugs: [], maxDepth: 0 };
     if (!this.state.discovered.fish) this.state.discovered.fish = []; // migração: menu de progresso ganhou peixe depois
     if (!this.state.discovered.bugs) this.state.discovered.bugs = []; // migração: menu de progresso ganhou inseto depois
+    // migração: fazenda que já existia antes da carta da avó — trata como "já mostrada"
+    // (senão um jogador estabelecido veria a introdução de "fazenda nova" do nada).
+    if (this.state.introShown == null) this.state.introShown = true;
     // migração: mapa cresceu (vila a leste, depois mina/praia/Porto Vale ao sul e mais
     // a leste) — fazendas salvas antes disso têm a área nova vazia (o SCATTER original
     // só roda uma vez, na criação da fazenda). Densidade proporcional à área nova.
@@ -217,9 +220,15 @@ class Room {
     const m = this.mapOf(p.map);
     const s = this.state;
     const isOw = m.key === 'overworld';
+    // Carta da avó: dispara na PRIMEIRA vez que qualquer payload é montado pra essa
+    // fazenda (não precisa ser overworld — se por algum motivo o 1º payload for de outro
+    // mapa, tanto faz, é só o gatilho de "é a primeira vez que alguém entra aqui").
+    const showIntro = !s.introShown;
+    if (showIntro) { s.introShown = true; this.dirty = true; }
     return {
       farm: { id: this.farmId, code: this.code, name: this.name },
       map: m.key,
+      showIntro,
       world: {
         width: m.w, height: m.h, tile: W.TILE,
         ground: m.ground, buildings: W.BUILDINGS[m.key] || [], spawn: m.spawn,

@@ -287,6 +287,9 @@ class GameScene extends Phaser.Scene {
     this.hud.setQuest(d.state.quest);
     this.hud.setDiscovered(d.state.discovered);
     this.hud.showLocation(mapDisplayName(this.mapKey));
+    // Carta da avó: só o servidor sabe se é a 1ª vez que ALGUÉM entra nessa fazenda
+    // (ver mapPayload em rooms.js) — abre o modal uma única vez na vida da fazenda.
+    if (d.showIntro) document.getElementById('modal-intro').classList.add('open');
     this.serverTime = d.state.time;
     this.serverTimeAt = performance.now();
     this.hud.setTime(d.state);

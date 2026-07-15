@@ -734,6 +734,10 @@ function initialFarmState(seed) {
     // cultivo, minera um minério ou derrota um monstro. maxDepth = nível mais fundo já
     // alcançado na mina (não precisa ter sobrevivido, só ter chegado lá).
     discovered: { crops: [], minerals: [], monsters: [], fish: [], bugs: [], maxDepth: 0 },
+    // Carta da avó (introdução da história) — mostrada UMA VEZ pra fazenda inteira, pro
+    // primeiro jogador que entrar (ver mapPayload em rooms.js). Vira true assim que é
+    // enviada, não repete pros amigos que entrarem depois numa fazenda já em andamento.
+    introShown: false,
   };
   scatterForage(state, 25, mulberry32(seed ^ 0x9e37));
   return state;

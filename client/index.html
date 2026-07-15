@@ -156,6 +156,16 @@
   .prog-item .prog-name { display: none; }
   .prog-depth { background: #fffbee; border: 3px solid var(--border); border-radius: 8px; padding: 10px; font-size: 13px; }
   .prog-depth .gl-bar { margin-top: 6px; }
+  .obj-list { display: flex; flex-direction: column; gap: 6px; }
+  .obj-item { background: #fffbee; border: 3px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .obj-item.done { border-color: #6fbf4a; }
+  .obj-item.locked { opacity: .5; filter: grayscale(.6); }
+  .obj-title { font-size: 13px; font-weight: 700; }
+  .obj-desc { font-size: 11px; color: var(--text); opacity: .8; margin-top: 2px; }
+  .obj-hint { font-size: 10px; color: #8a6d3b; font-style: italic; margin-top: 3px; }
+  .intro-letter { background: #fbf3df; }
+  .intro-letter p { font-size: 13px; line-height: 1.6; margin: 0 0 10px; }
+  .intro-letter .intro-sign { font-style: italic; text-align: right; color: #8a6d3b; margin-top: 4px; }
   .shop-item img { width: 28px; height: 28px; image-rendering: pixelated; }
 
   #toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 40;
@@ -308,6 +318,17 @@
     <div style="font-size:12px;margin-bottom:10px" data-i18n="progress.hint"></div>
     <div id="progress-content"></div>
     <button class="secondary" data-close data-i18n="close"></button>
+  </div>
+</div>
+
+<div class="modal-back" id="modal-intro">
+  <div class="panel modal intro-letter">
+    <h2 data-i18n="intro.title"></h2>
+    <p data-i18n="intro.p1"></p>
+    <p data-i18n="intro.p2"></p>
+    <p data-i18n="intro.p3"></p>
+    <p class="intro-sign" data-i18n="intro.sign"></p>
+    <button class="green" data-close data-i18n="intro.close"></button>
   </div>
 </div>
 

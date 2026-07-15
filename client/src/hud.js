@@ -379,6 +379,53 @@ export class Hud {
     $('bin-content').textContent = content;
   }
 
+  // ---------- objetivos em cascata ----------
+  // Metas derivadas 100% do `discovered` que já existe (nenhum estado novo no servidor)
+  // — algumas exigem completar outra ANTES de aparecer disponíveis (`requires`), pedido
+  // explícito do usuário ("quero que alguns objetivos sejam desbloqueados em cascata").
+  // check(d) recebe o `discovered` da fazenda e devolve se a meta foi cumprida.
+  static get OBJECTIVES() {
+    return [
+      { id: 'first_harvest', requires: [], check: (d) => (d.crops || []).length >= 1 },
+      { id: 'first_ore', requires: [], check: (d) => (d.minerals || []).length >= 1 },
+      { id: 'master_miner', requires: ['first_ore'], check: (d) => (d.minerals || []).length >= 3 },
+      { id: 'monster_slayer', requires: [], check: (d) => (d.monsters || []).length >= 1 },
+      { id: 'monster_master', requires: ['monster_slayer'], check: (d) => (d.monsters || []).length >= 4 },
+      { id: 'angler', requires: [], check: (d) => (d.fish || []).length >= 3 },
+      { id: 'bug_collector', requires: [], check: (d) => (d.bugs || []).length >= 3 },
+      { id: 'deep_diver', requires: [], check: (d) => (d.maxDepth || 0) >= 10 },
+      { id: 'deep_diver_2', requires: ['deep_diver'], check: (d) => (d.maxDepth || 0) >= 25 },
+      { id: 'master_farmer', requires: ['first_harvest'], check: (d) => (d.crops || []).length >= 6 },
+      {
+        id: 'full_collection',
+        requires: ['master_miner', 'monster_master', 'angler', 'bug_collector', 'master_farmer'],
+        check: (d) => (d.crops || []).length >= 10 && (d.minerals || []).length >= 3 &&
+          (d.monsters || []).length >= 4 && (d.fish || []).length >= 6 && (d.bugs || []).length >= 6,
+      },
+    ];
+  }
+
+  renderObjectives() {
+    const disc = this.discovered || {};
+    const OBJ = Hud.OBJECTIVES;
+    const done = new Set(OBJ.filter((o) => o.check(disc)).map((o) => o.id));
+    const items = OBJ.map((o) => {
+      const isDone = done.has(o.id);
+      const lockedBy = o.requires.find((r) => !done.has(r));
+      const locked = !isDone && lockedBy;
+      const cls = isDone ? 'done' : locked ? 'locked' : 'available';
+      const status = isDone ? '✅' : locked ? '🔒' : '▫️';
+      const hint = locked ? `<div class="obj-hint">${t('objectives.lockedBy', { name: t(`objectives.${lockedBy}.title`) })}</div>` : '';
+      return `<div class="obj-item ${cls}">
+        <div class="obj-title">${status} ${escapeHtml(t(`objectives.${o.id}.title`))}</div>
+        <div class="obj-desc">${escapeHtml(t(`objectives.${o.id}.desc`))}</div>
+        ${hint}
+      </div>`;
+    }).join('');
+    return `<div class="prog-section"><h3>${t('progress.objectives')} <span class="count">${done.size}/${OBJ.length}</span></h3>
+      <div class="obj-list">${items}</div></div>`;
+  }
+
   // ---------- progresso/coleção ----------
   // Referência de tudo que EXISTE hoje pra descobrir (cultivos/minérios/monstros) — o
   // menu mostra cada categoria como "descobertos/total", cinza-e-cadeado até a fazenda
@@ -412,6 +459,7 @@ export class Hud {
     };
     const depthPct = Math.min(100, Math.round((disc.maxDepth / 100) * 100));
     const html = [
+      this.renderObjectives(),
       section('progress.crops', CROP_IDS, disc.crops, (id) => `/assets/icons/item_${id}.png`, (id) => t(`crop.${id}`)),
       section('progress.minerals', MINERAL_IDS, disc.minerals, (id) => `/assets/icons/item_${id}.png`, (id) => t(`item.${id}`)),
       section('progress.fish', FISH_IDS, disc.fish || [], () => '/assets/icons/item_fish.png', (id) => t(`fish.${id}`)),
