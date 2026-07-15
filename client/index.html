@@ -135,6 +135,14 @@
     background: var(--panel); border: 3px solid var(--border); border-radius: 8px;
     font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
   }
+  #location-banner {
+    position: absolute; top: 10px; left: 60px; z-index: 9; background: var(--panel);
+    border: 3px solid var(--border); border-radius: 8px; padding: 8px 16px;
+    font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap;
+    opacity: 0; transform: translateY(-6px); pointer-events: none;
+    transition: opacity .4s ease, transform .4s ease;
+  }
+  #location-banner.show { opacity: 1; transform: translateY(0); }
   .prog-section { margin-bottom: 14px; }
   .prog-section h3 { font-size: 13px; margin: 0 0 6px; display: flex; justify-content: space-between; }
   .prog-section h3 .count { color: #8a6d3b; font-weight: 700; }
@@ -247,6 +255,7 @@
     </div>
   </div>
   <button id="btn-progress" title="Progresso (P)">📖</button>
+  <div id="location-banner"></div>
   <div class="hud" id="hud-clock"></div>
   <div class="hud" id="hud-energy"><div class="fill" style="height:100%"></div></div>
   <div class="hud" id="hud-health"><div class="fill" style="height:100%"></div></div>

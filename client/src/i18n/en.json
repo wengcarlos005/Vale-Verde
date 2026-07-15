@@ -179,6 +179,16 @@
   "bug.cricket": "Cricket",
   "bug.firefly": "Firefly",
 
+  "loc.overworld": "Greenvale",
+  "loc.portovale": "Port Vale",
+  "loc.south": "Serene Cove",
+  "loc.pedreira": "Quarry Town",
+  "loc.floresta": "Whispering Forest",
+  "loc.house": "Your House",
+  "loc.shop": "Bob's Shop",
+  "loc.mine": "Abandoned Mine — Level {depth}",
+  "loc.coop": "Chicken Coop",
+
   "hud.day": "Day {day} — {season}",
   "interact.sleep": "Sleep (E)",
   "interact.shop": "Shop (E)",

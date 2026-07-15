@@ -90,6 +90,18 @@ export class Hud {
     el._t = setTimeout(() => { el.style.display = 'none'; }, ms);
   }
 
+  // Nome da área no canto superior esquerdo por um breve momento ao entrar (pedido do
+  // usuário, estilo Stardew Valley) — some sozinho depois de alguns segundos.
+  showLocation(name, ms = 3200) {
+    const el = $('location-banner');
+    el.textContent = name;
+    el.classList.remove('show');
+    void el.offsetWidth; // força reflow — reinicia a transição mesmo se já estava visível (troca rápida de mapa)
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('show'), ms);
+  }
+
   // ---------- estado ----------
   setInv(inv) {
     this.inv = inv;

@@ -179,6 +179,16 @@
   "bug.cricket": "Grilo",
   "bug.firefly": "Vagalume",
 
+  "loc.overworld": "Vale Verde",
+  "loc.portovale": "Porto Vale",
+  "loc.south": "Enseada Serena",
+  "loc.pedreira": "Vila da Pedreira",
+  "loc.floresta": "Floresta Sussurrante",
+  "loc.house": "Sua Casa",
+  "loc.shop": "Loja do Bob",
+  "loc.mine": "Mina Abandonada — Nível {depth}",
+  "loc.coop": "Galinheiro",
+
   "hud.day": "Dia {day} — {season}",
   "interact.sleep": "Dormir (E)",
   "interact.shop": "Loja (E)",

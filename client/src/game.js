@@ -25,6 +25,30 @@ const OBJ_FOOTPRINT = { table: [3, 2], counter: [3, 2], bed: [2, 2], shelf: [2, 
 // Drops de corte/mineração (ao contrário dos forrageáveis nativos berry/mushroom/log) —
 // ver setForage(): esses flutuam, os nativos não.
 const DROP_TYPES = new Set(['wood', 'stone', 'iron', 'copper', 'gold']);
+// Insetos: sem sprite dedicado por espécie no pack (mesma solução simplificada dos
+// peixes), mas reaproveitam as 8 variantes de COR da sheet da borboleta (ver comentário
+// do preload) pra pelo menos ter identidade visual CONSISTENTE por espécie — a mesma
+// borboleta laranja é sempre "vagalume", por exemplo.
+const BUG_FRAME = { butterfly: 0, ladybug: 2, dragonfly: 5, cricket: 1, firefly: 6, bee: 3 };
+
+// Nome de cada área, mostrado no banner do canto superior esquerdo ao entrar (pedido do
+// usuário — "dê nome a cada mapa, cidade, passagem"). Mina/galinheiro são famílias de
+// mapas por instância (mine:N, coop:ID), resolvidas à parte.
+const LOCATION_NAMES = {
+  overworld: 'loc.overworld',
+  portovale: 'loc.portovale',
+  south: 'loc.south',
+  pedreira: 'loc.pedreira',
+  floresta: 'loc.floresta',
+  house: 'loc.house',
+  shop: 'loc.shop',
+};
+function mapDisplayName(mapKey) {
+  if (mapKey.startsWith('mine:')) return t('loc.mine', { depth: mapKey.slice(5) });
+  if (mapKey.startsWith('coop:')) return t('loc.coop');
+  const key = LOCATION_NAMES[mapKey];
+  return key ? t(key) : mapKey;
+}
 
 const T = 16;                       // tile
 const SPEED = 95;                   // px/s
@@ -96,7 +120,7 @@ export function startGame(farm) {
 // (troca de tela), senão os handlers da cena antiga ficariam duplicados no socket.
 const GAME_EVENTS = [
   'playerJoined', 'playerLeft', 'playerMoved', 'playerAppearance', 'chat', 'tile', 'object',
-  'egg', 'forage', 'monster', 'monsterAttack', 'discovered', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
+  'egg', 'forage', 'bug', 'monster', 'monsterAttack', 'discovered', 'animals', 'building', 'inv', 'money', 'bin', 'quest', 'questDelivered',
   'time', 'err', 'sleepState', 'dayEnded', 'mapRefresh', 'disconnect', 'connect', 'stairsRevealed',
 ];
 
@@ -262,6 +286,7 @@ class GameScene extends Phaser.Scene {
     this.hud.setBin(d.state.bin);
     this.hud.setQuest(d.state.quest);
     this.hud.setDiscovered(d.state.discovered);
+    this.hud.showLocation(mapDisplayName(this.mapKey));
     this.serverTime = d.state.time;
     this.serverTimeAt = performance.now();
     this.hud.setTime(d.state);
@@ -303,6 +328,11 @@ class GameScene extends Phaser.Scene {
     this.forageState = d.state.forage || {};
     this.forageSprites = new Map();
     for (const [key, f] of Object.entries(this.forageState)) this.setForage(key, f);
+
+    // insetos visíveis da Floresta (entidades de verdade pra caçar, ver setBug)
+    this.bugsState = d.state.bugs || {};
+    this.bugSprites = new Map();
+    for (const [key, b] of Object.entries(this.bugsState)) this.setBug(key, b);
 
     // monstros da mina (parados — vida/hp resolvidos no servidor)
     this.monstersState = d.state.monsters || {};
@@ -867,6 +897,32 @@ class GameScene extends Phaser.Scene {
     this.forageState = forage;
   }
 
+  // Insetos visíveis na Floresta — reaproveita as 8 variantes de cor da sheet da
+  // borboleta (ver preload/BUG_FRAME) como "espécie visual" por tipo; flutua suave pra
+  // ler como bicho vivo, não decoração parada (mesmo princípio do ovo/drop flutuante).
+  setBug(key, bug) {
+    const cur = this.bugSprites.get(key);
+    if (bug) {
+      if (!cur) {
+        const [x, y] = key.split(',').map(Number);
+        const baseY = y * T + T - 2;
+        const frame = BUG_FRAME[bug.type] ?? 0;
+        const sp = this.add.sprite(x * T + T / 2, baseY, 'butterfly', frame).setOrigin(0.5, 1).setDepth(baseY);
+        this.tweens.add({ targets: sp, y: baseY - 4, duration: 500 + Math.random() * 300, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+        this.bugSprites.set(key, sp);
+      }
+    } else if (cur) {
+      cur.destroy();
+      this.bugSprites.delete(key);
+    }
+  }
+
+  setBugAll(bugs) {
+    for (const key of [...this.bugSprites.keys()]) if (!bugs[key]) this.setBug(key, null);
+    for (const key of Object.keys(bugs)) if (!this.bugSprites.has(key)) this.setBug(key, bugs[key]);
+    this.bugsState = bugs;
+  }
+
   // ---------------- monstros da mina ----------------
   spawnMonster(id, m) {
     this.despawnMonster(id);
@@ -1281,7 +1337,8 @@ class GameScene extends Phaser.Scene {
     // (copa de árvore / folhas de um cultivo) — evita agir no tile de baixo por engano.
     const hereTile = this.tilesState[key];
     const hereActionable = obj || (hereTile && (hereTile.crop || hereTile.tilled))
-      || (this.eggsState && this.eggsState[key]) || (this.forageState && this.forageState[key]);
+      || (this.eggsState && this.eggsState[key]) || (this.forageState && this.forageState[key])
+      || (this.bugsState && this.bugsState[key]);
     if (!hereActionable && worldX !== undefined) {
       // árvores/pedras/arbustos pelo retângulo do sprite — quando MAIS de um sprite
       // sobrepõe o ponto clicado (copa de árvore encostando numa pedra vizinha, por
@@ -1351,7 +1408,9 @@ class GameScene extends Phaser.Scene {
     // ground=1 pro lago de caverna em alguns formatos de nível, pesca ali também vale).
     else if (item && item.id === 'rod' && (ground === 1 || ground === 5)) { type = 'fish'; }
     // Caça de insetos: rede equipada + clique em grama, só no mapa da Floresta.
-    else if (item && item.id === 'net' && this.mapKey === 'floresta' && ground === 0) { type = 'catch'; }
+    // Caça de insetos: agora precisa mirar um inseto DE VERDADE visível (this.bugsState),
+    // não qualquer grama — antes resolvia sozinho sem nada pra ver/perseguir.
+    else if (item && item.id === 'net' && this.mapKey === 'floresta' && this.bugsState && this.bugsState[key]) { type = 'catch'; }
 
     if (!type) return;
     if (type === 'water' && ground !== 1 && (!tile || !tile.tilled)) return;
@@ -1448,6 +1507,7 @@ class GameScene extends Phaser.Scene {
     });
     s.on('egg', ({ key, egg }) => { if (egg) this.eggsState[key] = egg; else delete this.eggsState[key]; this.setEgg(key, egg); });
     s.on('forage', ({ key, item }) => { if (item) this.forageState[key] = item; else delete this.forageState[key]; this.setForage(key, item); });
+    s.on('bug', ({ key, bug }) => { if (bug) this.bugsState[key] = bug; else delete this.bugsState[key]; this.setBug(key, bug); });
     s.on('monster', ({ id, monster }) => { if (monster) this.monstersState[id] = monster; else delete this.monstersState[id]; this.updateMonster(id, monster); });
     s.on('monsterAttack', ({ id }) => this.monsterAttackCue(id));
     s.on('discovered', (d) => this.hud.setDiscovered(d));

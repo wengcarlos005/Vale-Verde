@@ -109,11 +109,17 @@ class Room {
   mapOf(mapKey) {
     if (!mapKey || mapKey === 'overworld') {
       if (!this._owEntrances) this._owEntrances = W.worldEntrances('overworld');
+      // Porta de cada galinheiro CONSTRUÍDO (dinâmico, um por instância — não dá pra
+      // pré-computar como as entradas fixas acima) recalculada toda vez (lista de
+      // prédios é pequena, custo desprezível) pra sempre refletir galinheiros novos.
+      const coopEnts = this.state.buildings
+        .filter((b) => b.type === 'coop')
+        .map((b) => ({ at: W.coopDoorTile(b), kind: 'door', to: `coop:${b.id}`, toSpawn: W.COOP_INT_SPAWN }));
       return {
         key: 'overworld',
         ground: this.state.ground, objects: this.state.objects, tiles: this.state.tiles,
         forage: this.state.forage, eggs: this.state.eggs, monsters: {},
-        w: W.WIDTH, h: W.HEIGHT, entrances: this._owEntrances, spawn: W.SPAWN,
+        w: W.WIDTH, h: W.HEIGHT, entrances: [...this._owEntrances, ...coopEnts], spawn: W.SPAWN,
       };
     }
     if (!this._maps) this._maps = {};
@@ -126,6 +132,21 @@ class Room {
           ground: gen.ground, objects: gen.objects, tiles: {}, forage: {}, eggs: {}, monsters: {},
           w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn, interactables: gen.interactables,
         };
+      } else if (mapKey.startsWith('coop:')) {
+        // Interior do galinheiro — layout fixo (não muda), mas os OVOS persistem por
+        // instância de prédio (uma sala por galinheiro construído). building pode não
+        // existir mais (demolição não é uma feature hoje, mas defensivo não custa nada).
+        const buildingId = Number(mapKey.slice(5));
+        const building = this.state.buildings.find((b) => b.id === buildingId) || { x: 0, y: 0 };
+        const gen = W.makeCoopInterior(building);
+        if (!this.state.maps) this.state.maps = {};
+        if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { eggs: {} };
+        const saved = this.state.maps[mapKey];
+        this._maps[mapKey] = {
+          key: mapKey,
+          ground: gen.ground, objects: gen.objects, tiles: {}, forage: {}, eggs: saved.eggs, monsters: {},
+          w: gen.w, h: gen.h, entrances: gen.entrances, spawn: gen.spawn,
+        };
       } else {
         // Porto Vale / south / mina: gera o terreno e persiste o estado mutável em
         // state.maps[mapKey] (preguiçoso — só na primeira visita).
@@ -136,9 +157,11 @@ class Room {
         else if (mapKey === 'floresta') { gen = W.generateFloresta(this.state.seed); entrances = W.worldEntrances('floresta'); }
         else { gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey)); entrances = gen.entrances; }
         if (!this.state.maps) this.state.maps = {};
-        if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {}, monsters: gen.monsters || {} };
+        const isNewFloresta = mapKey === 'floresta' && !this.state.maps[mapKey];
+        if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {}, monsters: gen.monsters || {}, bugs: {} };
         const saved = this.state.maps[mapKey];
         if (saved.monsters == null) saved.monsters = gen.monsters || {}; // migração: mapa salvo antes do sistema de combate
+        if (saved.bugs == null) saved.bugs = {}; // migração: mapa salvo antes da caça de insetos ganhar entidades visíveis
         // Migração: níveis de mina salvos ANTES da escada escondida não têm a pedra
         // especial no tile de descida (a escada sempre esteve visível ali) — considera
         // já revelada nesse caso, pra não trancar quem já tinha chegado lá. Só fica
@@ -177,9 +200,13 @@ class Room {
         this._maps[mapKey] = {
           key: mapKey,
           ground: gen.ground, objects: saved.objects, tiles: saved.tiles, forage: saved.forage, eggs: saved.eggs,
-          monsters: saved.monsters,
+          monsters: saved.monsters, bugs: saved.bugs,
           w: gen.w, h: gen.h, entrances, spawn: gen.spawn,
         };
+        // Primeira visita da Floresta: semeia a população inicial de insetos (pedido do
+        // usuário — "no mapa dos insetos não tem nenhum inseto pra capturar", a caça
+        // antes resolvia na hora clicando em qualquer grama, sem nada visível pra caçar).
+        if (isNewFloresta) this.respawnBugs(18);
       }
     }
     return this._maps[mapKey];
@@ -206,6 +233,7 @@ class Room {
         animals: isOw ? s.animals : [], eggs: m.eggs, buildings: isOw ? s.buildings : [],
         forage: m.forage, quest: s.quest, monsters: m.monsters || {}, discovered: s.discovered,
         stairsRevealed: m.key.startsWith('mine:') ? !!(s.maps[m.key] && s.maps[m.key].stairsRevealed) : true,
+        bugs: m.bugs || {},
       },
       crops: CROPS,
       recipes: RECIPES,
@@ -397,13 +425,20 @@ class Room {
     // repõe alguns recursos e forrageáveis
     this.respawnObjects(3);
     W.scatterForage(s, 8);
+    this.respawnBugs(6); // só faz algo se a Floresta já foi visitada (ver respawnBugs)
 
-    // galinhas botam um ovo cada, no quintal de algum galinheiro construído
+    // Galinhas botam um ovo cada, mas AGORA só dentro do galinheiro (pedido explícito do
+    // usuário) — precisa entrar pra coletar, não aparece mais solto no quintal externo
+    // (quintal continua existindo só pra galinha ciscar visualmente, ver coopYard/onBuyAnimal).
     const coops = this.coops();
     if (coops.length) {
       for (const animal of s.animals) {
-        const spot = this.freeYardTile(coops[Math.floor(Math.random() * coops.length)]);
-        if (spot) s.eggs[spot] = { id: animal.id };
+        const coop = coops[Math.floor(Math.random() * coops.length)];
+        const spot = this.freeCoopTile(coop.id);
+        if (spot) {
+          spot.eggs[spot.tileKey] = { id: animal.id };
+          this.emitMap(spot.mapKey, 'egg', { key: spot.tileKey, egg: spot.eggs[spot.tileKey] });
+        }
       }
     }
 
@@ -431,17 +466,19 @@ class Room {
     }
   }
 
-  // Tile de grama livre no quintal de um galinheiro (para botar ovo)
-  freeYardTile(coop) {
-    const s = this.state;
-    const y0 = W.coopYard(coop);
-    for (let tries = 0; tries < 40; tries++) {
-      const x = y0.x + Math.floor(Math.random() * y0.w);
-      const y = y0.y + Math.floor(Math.random() * y0.h);
-      const key = `${x},${y}`;
-      if (s.ground[y][x] === 0 && !s.objects[key] && !s.tiles[key] && !s.eggs[key] && !this.isBuildingTile(x, y)) {
-        return key;
-      }
+  // Tile livre DENTRO do galinheiro (interior por instância, ver makeCoopInterior) pra
+  // botar ovo — substitui o antigo freeYardTile (quintal externo), que só sobrevive pra
+  // posição de "ciscar" visual da galinha (coopYard, usado em onBuyAnimal).
+  freeCoopTile(coopId) {
+    const mapKey = `coop:${coopId}`;
+    if (!this.state.maps) this.state.maps = {};
+    if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { eggs: {} };
+    const eggs = this.state.maps[mapKey].eggs;
+    for (let tries = 0; tries < 20; tries++) {
+      const x = 1 + Math.floor(Math.random() * (W.COOP_INT_W - 2));
+      const y = 1 + Math.floor(Math.random() * (W.COOP_INT_H - 2));
+      const tileKey = `${x},${y}`;
+      if (!eggs[tileKey]) return { mapKey, eggs, tileKey };
     }
     return null;
   }
@@ -458,6 +495,31 @@ class Room {
       if (W.hasNearbyContent(s, x, y)) continue;
       s.objects[key] = Math.random() < 0.6 ? { type: 'tree', hp: 5 } : { type: 'rock', hp: 3 };
       n--;
+    }
+  }
+
+  // Insetos visíveis na Floresta (entidades de verdade, não "clique em qualquer grama"
+  // — pedido do usuário depois de reportar que não tinha nada pra ver/caçar lá). Só faz
+  // sentido chamar depois que a Floresta já foi visitada ao menos uma vez (senão não há
+  // `this._maps.floresta` pra escrever — chamado explicitamente na 1ª visita em mapOf()
+  // e diariamente em advanceDay() pra repor o que foi capturado).
+  respawnBugs(n) {
+    if (!this.state.maps || !this.state.maps.floresta) return;
+    const m = this.mapOf('floresta');
+    const candidates = Object.entries(BUGS)
+      .filter(([, b]) => b.season == null || b.season === this.state.season)
+      .map(([id]) => id);
+    if (!candidates.length) return;
+    let tries = 0, placed = 0;
+    while (placed < n && tries++ < 400) {
+      const x = 1 + Math.floor(Math.random() * (m.w - 2));
+      const y = 1 + Math.floor(Math.random() * (m.h - 2));
+      const key = `${x},${y}`;
+      if (m.ground[y][x] !== 0 || m.objects[key] || m.bugs[key]) continue;
+      const bugType = candidates[Math.floor(Math.random() * candidates.length)];
+      m.bugs[key] = { type: bugType };
+      this.emitMap('floresta', 'bug', { key, bug: m.bugs[key] });
+      placed++;
     }
   }
 
@@ -620,16 +682,17 @@ class Room {
       this.discover('fish', fishId);
       socket.emit('inv', inv);
     } else if (type === 'catch') {
-      // Caça de insetos (Floresta, mapa novo) — mesmo espírito simplificado da pesca:
-      // clicar numa grama com a rede equipada resolve a captura na hora, sem minigame.
-      // Espécie sorteada entre as que combinam com a estação atual.
+      // Caça de insetos (Floresta): agora precisa mirar um inseto DE VERDADE visível no
+      // mapa (m.bugs[key], populado por respawnBugs) — antes qualquer clique na grama
+      // resolvia sozinho, sem nada pra realmente ver/perseguir (usuário reportou "não
+      // tem nenhum inseto pra capturar"). Espécie é a do inseto clicado, não sorteada.
       if (p.map !== 'floresta') return;
-      if (ground !== 0) return;
+      if (!m.bugs || !m.bugs[key]) return;
       if (!inv.items.net) return;
       if (!this.spend(inv, COST.catch, socket)) return;
-      const candidates = Object.entries(BUGS).filter(([, b]) => b.season == null || b.season === this.state.season);
-      if (!candidates.length) { socket.emit('inv', inv); return; }
-      const [bugId] = candidates[Math.floor(Math.random() * candidates.length)];
+      const bugId = m.bugs[key].type;
+      delete m.bugs[key];
+      this.emitMap(p.map, 'bug', { key, bug: null });
       this.addItem(inv, bugId, 1);
       this.discover('bugs', bugId);
       socket.emit('inv', inv);

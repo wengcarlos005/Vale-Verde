@@ -643,6 +643,32 @@ function makeInterior(kind) {
   return { ground, objects, entrances, interactables, w, h, spawn: INT_SPAWN.slice() };
 }
 
+// ---------------- interior do galinheiro (por INSTÂNCIA de prédio) ----------------
+// Pedido do usuário: galinha só bota ovo aqui dentro agora (não mais no quintal externo
+// — o quintal continua existindo só pra galinha ciscar visualmente, ver coopYard). Cada
+// galinheiro construído tem sua PRÓPRIA sala (`coop:<id>`, building.id é único por
+// fazenda), diferente de casa/loja que são uma sala fixa só (só existe 1 casa/loja).
+const COOP_INT_W = 7, COOP_INT_H = 6;
+const COOP_INT_DOOR = Math.floor(COOP_INT_W / 2);
+const COOP_INT_SPAWN = [COOP_INT_DOOR, COOP_INT_H - 2];
+
+// Tile de interação em frente ao galinheiro (mesma linha onde o quintal começa,
+// `coopYard` usa a mesma referência) — onde o jogador precisa estar pra entrar.
+function coopDoorTile(building) {
+  return [building.x + BUILDING_DEFS.coop.door[0], building.y + BUILDING_DEFS.coop.door[1]];
+}
+
+function makeCoopInterior(building) {
+  const w = COOP_INT_W, h = COOP_INT_H;
+  const ground = [];
+  for (let y = 0; y < h; y++) ground.push(new Array(w).fill(6));
+  const objects = {};
+  for (let x = 0; x < w; x++) { objects[`${x},0`] = { type: 'wall' }; if (x !== COOP_INT_DOOR) objects[`${x},${h - 1}`] = { type: 'wall' }; }
+  for (let y = 0; y < h; y++) { objects[`0,${y}`] = { type: 'wall' }; objects[`${w - 1},${y}`] = { type: 'wall' }; }
+  const entrances = [{ at: [COOP_INT_DOOR, h - 1], kind: 'door', to: 'overworld', toSpawn: coopDoorTile(building) }];
+  return { ground, objects, entrances, w, h, spawn: COOP_INT_SPAWN.slice() };
+}
+
 // Pontos onde os mapas "ao ar livre" (overworld/portovale/south) se cruzam na borda —
 // andar até lá dispara enterMap pra tela vizinha, igual a uma porta.
 const EDGE_LINKS = {
@@ -738,4 +764,5 @@ module.exports = {
   generateOverworld, generatePortoVale, generateSouth, generatePedreira, generateFloresta, initialFarmState,
   inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
   inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, makeInterior, worldEntrances, depthOf,
+  makeCoopInterior, coopDoorTile, COOP_INT_SPAWN, COOP_INT_W, COOP_INT_H,
 };
