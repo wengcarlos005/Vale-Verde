@@ -61,6 +61,7 @@
   "craft.bowDesc": "arma à distância, alcance longo",
   "craft.shieldDesc": "reduz o dano recebido de monstros ao ser equipado",
   "craft.rodDesc": "selecione e clique na água (lago ou oceano) para pescar",
+  "craft.netDesc": "selecione e clique na grama da Floresta para caçar insetos",
 
   "quest.title": "📋 Quadro de Recados",
   "quest.hint": "Entregue o que está pedindo e ganhe moedas — um novo pedido aparece depois.",
@@ -73,6 +74,7 @@
   "progress.crops": "🌾 Cultivos colhidos",
   "progress.minerals": "💎 Minérios minerados",
   "progress.fish": "🐟 Peixes pescados",
+  "progress.bugs": "🦋 Insetos caçados",
   "progress.monsters": "⚔️ Monstros derrotados",
   "progress.mine": "⛏️ Nível mais fundo da mina",
   "progress.mineHint": "A mina tem 100 níveis — quanto mais fundo, mais raro o minério e mais forte o monstro.",
@@ -159,6 +161,7 @@
   "tool.bow": "Arco e Flecha",
   "tool.shield": "Escudo",
   "tool.rod": "Vara de Pesca",
+  "tool.net": "Rede de Insetos",
 
   "fish.carp": "Carpa",
   "fish.trout": "Truta",
@@ -166,6 +169,13 @@
   "fish.sardine": "Sardinha",
   "fish.tuna": "Atum",
   "fish.squid": "Lula",
+
+  "bug.butterfly": "Borboleta",
+  "bug.bee": "Abelha",
+  "bug.ladybug": "Joaninha",
+  "bug.dragonfly": "Libélula",
+  "bug.cricket": "Grilo",
+  "bug.firefly": "Vagalume",
 
   "hud.day": "Dia {day} — {season}",
   "interact.sleep": "Dormir (E)",

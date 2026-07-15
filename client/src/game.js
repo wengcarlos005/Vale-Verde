@@ -163,6 +163,7 @@ class GameScene extends Phaser.Scene {
     for (const tl of ['hoe', 'can', 'axe', 'pickaxe']) L.image(`tool_${tl}`, `/assets/icons/tool_${tl}.png`);
     for (const wp of ['sword', 'spear', 'bow', 'shield']) L.image(`tool_${wp}`, `/assets/icons/tool_${wp}.png`);
     L.image('tool_rod', '/assets/icons/tool_rod.png');
+    L.image('tool_net', '/assets/icons/tool_net.png');
     // Monstros da mina: 4 frames idle cada, mesmo padrão dos outros bichos (chicken etc).
     L.spritesheet('mob_slime_small', '/assets/mob_slime_small.png', { frameWidth: 16, frameHeight: 16 });
     L.spritesheet('mob_slime_medium', '/assets/mob_slime_medium.png', { frameWidth: 32, frameHeight: 32 });
@@ -182,7 +183,11 @@ class GameScene extends Phaser.Scene {
     L.spritesheet('decor_mushroom', '/assets/decor_mushroom.png', { frameWidth: T, frameHeight: T });
     L.spritesheet('decor_cattail', '/assets/decor_cattail.png', { frameWidth: T, frameHeight: T });
     L.spritesheet('decor_lily', '/assets/decor_lily.png', { frameWidth: T, frameHeight: T });
-    L.spritesheet('butterfly', '/assets/butterfly.png', { frameWidth: T, frameHeight: T });
+    // BUG REAL achado ao extrair o ícone de inseto: Butterfly.png não é 4 frames de
+    // 16x16 como a definição antiga assumia — é 8 frames de 16x8 (confirmado por scan de
+    // alpha em extract_assets.py). Com frameHeight errado, cada "frame" da animação
+    // decorativa juntava 2 borboletas empilhadas — corrigido aqui e no range da anim.
+    L.spritesheet('butterfly', '/assets/butterfly.png', { frameWidth: T, frameHeight: T / 2 });
 
     L.spritesheet('p_base', '/assets/player/base.png', { frameWidth: 64, frameHeight: 64 });
     for (let s = 1; s <= 6; s++) for (const c of HAIR_COLORS)
@@ -221,6 +226,7 @@ class GameScene extends Phaser.Scene {
     this.recipes = d.recipes || {};
     this.weapons = d.weapons || {};
     this.fish = d.fish || {};
+    this.bugs = d.bugs || {};
     this.tilesState = d.state.tiles;
     this.objectsState = d.state.objects;
     this.buildingsState = d.state.buildings || [];
@@ -244,6 +250,7 @@ class GameScene extends Phaser.Scene {
     });
     this.hud.crops = this.crops;
     this.hud.fish = this.fish;
+    this.hud.bugs = this.bugs;
     this.hud.buildingDefs = this.buildingDefs;
     this.hud.recipes = this.recipes;
     this.hud.setInv(d.you.inv);
@@ -258,7 +265,6 @@ class GameScene extends Phaser.Scene {
     // anims compartilhadas (antes de spawnar qualquer objeto)
     this.anims.create({ key: 'water_flow', frames: this.anims.generateFrameNumbers('water', { start: 0, end: 7 }), frameRate: 4, repeat: -1 });
     this.anims.create({ key: 'bob_idle', frames: this.anims.generateFrameNumbers('bob', { start: 0, end: 5 }), frameRate: 5, repeat: -1 });
-    this.anims.create({ key: 'butterfly_fly', frames: this.anims.generateFrameNumbers('butterfly', { start: 0, end: 3 }), frameRate: 10, repeat: -1 });
     this.anims.create({ key: 'boat_bob', frames: this.anims.generateFrameNumbers('boat', { start: 0, end: 3 }), frameRate: 3, repeat: -1 });
     for (const key of ['mob_slime_small', 'mob_slime_medium', 'mob_slime_big', 'mob_skeleton']) {
       this.anims.create({ key: `${key}_idle`, frames: this.anims.generateFrameNumbers(key, { start: 0, end: 3 }), frameRate: 4, repeat: -1 });
@@ -564,10 +570,13 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < 5; i++) placeProp('hay', 30);
     for (let i = 0; i < 6; i++) placeProp('log_fallen', 30);
 
-    // borboletas passeando
+    // borboletas passeando — as 8 "frames" da sheet são variantes de COR (não uma
+    // animação de bater asas, ver comentário do preload), então cada borboleta ganha um
+    // frame fixo sorteado no spawn (mesmo padrão de variante já usado em bushes/árvores),
+    // em vez de tocar como flipbook (o que cicla cor rapidamente e fica errado).
     this.butterflies = [];
     for (let i = 0; i < 4; i++) {
-      const s = this.add.sprite(rnd() * W_ * T, rnd() * H_ * T, 'butterfly', 0).setDepth(5000).play('butterfly_fly');
+      const s = this.add.sprite(rnd() * W_ * T, rnd() * H_ * T, 'butterfly', Math.floor(rnd() * 8)).setDepth(5000);
       this.butterflies.push({ s, tx: rnd() * W_ * T, ty: rnd() * H_ * T, phase: rnd() * 6 });
     }
   }
@@ -1307,14 +1316,16 @@ class GameScene extends Phaser.Scene {
     // Pesca: vara equipada + clique num tile de água (lago OU oceano — a mina reusa
     // ground=1 pro lago de caverna em alguns formatos de nível, pesca ali também vale).
     else if (item && item.id === 'rod' && (ground === 1 || ground === 5)) { type = 'fish'; }
+    // Caça de insetos: rede equipada + clique em grama, só no mapa da Floresta.
+    else if (item && item.id === 'net' && this.mapKey === 'floresta' && ground === 0) { type = 'catch'; }
 
     if (!type) return;
     if (type === 'water' && ground !== 1 && (!tile || !tile.tilled)) return;
     if (type === 'place' && tile) return;
     this.socket.emit('action', { type, x: tx, y: ty, ...extra });
     this.playAnim(me, 'act', me.dir, true);
-    // ferramenta na mão dando o golpe (machado, picareta, enxada, regador, vara)
-    const toolFor = { chop: 'axe', mine: 'pickaxe', till: 'hoe', water: 'can', plant: null, harvest: null, fish: 'rod' };
+    // ferramenta na mão dando o golpe (machado, picareta, enxada, regador, vara, rede)
+    const toolFor = { chop: 'axe', mine: 'pickaxe', till: 'hoe', water: 'can', plant: null, harvest: null, fish: 'rod', catch: 'net' };
     this.showToolSwing(me, toolFor[type]);
     if (type === 'harvest') this.popHarvest(key);
     this.sendMove(true);

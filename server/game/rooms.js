@@ -1,6 +1,6 @@
 // Salas de jogo: uma por fazenda, servidor autoritativo.
 const { stmts } = require('../db');
-const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
+const { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, BUGS, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS } = require('./crops');
 const W = require('./world');
 
 const DAY_START = 6 * 60;          // 6:00
@@ -10,7 +10,7 @@ const MIN_PER_TICK = (DAY_END - DAY_START) / (REAL_DAY_MS / 1000); // por segund
 
 const ENERGY_MAX = 100;
 const HEALTH_MAX = 100;
-const COST = { till: 2, water: 1, plant: 1, harvest: 1, chop: 2, mine: 2, place: 1, fish: 3 };
+const COST = { till: 2, water: 1, plant: 1, harvest: 1, chop: 2, mine: 2, place: 1, fish: 3, catch: 2 };
 
 function newInventory() {
   return {
@@ -69,8 +69,9 @@ class Room {
     if (!this.state.forage) { this.state.forage = {}; W.scatterForage(this.state, 25); }
     if (!this.state.quest) this.state.quest = pickQuest();
     if (!this.state.maps) this.state.maps = {}; // estado mutável das telas de mina
-    if (!this.state.discovered) this.state.discovered = { crops: [], minerals: [], monsters: [], fish: [], maxDepth: 0 };
+    if (!this.state.discovered) this.state.discovered = { crops: [], minerals: [], monsters: [], fish: [], bugs: [], maxDepth: 0 };
     if (!this.state.discovered.fish) this.state.discovered.fish = []; // migração: menu de progresso ganhou peixe depois
+    if (!this.state.discovered.bugs) this.state.discovered.bugs = []; // migração: menu de progresso ganhou inseto depois
     // migração: mapa cresceu (vila a leste, depois mina/praia/Porto Vale ao sul e mais
     // a leste) — fazendas salvas antes disso têm a área nova vazia (o SCATTER original
     // só roda uma vez, na criação da fazenda). Densidade proporcional à área nova.
@@ -132,6 +133,7 @@ class Room {
         if (mapKey === 'portovale') { gen = W.generatePortoVale(this.state.seed); entrances = W.worldEntrances('portovale'); }
         else if (mapKey === 'south') { gen = W.generateSouth(this.state.seed); entrances = W.worldEntrances('south'); }
         else if (mapKey === 'pedreira') { gen = W.generatePedreira(this.state.seed); entrances = W.worldEntrances('pedreira'); }
+        else if (mapKey === 'floresta') { gen = W.generateFloresta(this.state.seed); entrances = W.worldEntrances('floresta'); }
         else { gen = W.makeMineLevel(this.state.seed, W.depthOf(mapKey)); entrances = gen.entrances; }
         if (!this.state.maps) this.state.maps = {};
         if (!this.state.maps[mapKey]) this.state.maps[mapKey] = { objects: gen.objects, tiles: {}, forage: {}, eggs: {}, monsters: gen.monsters || {} };
@@ -154,7 +156,7 @@ class Room {
         // da limpeza de validGround que já existe pro overworld. NÃO mexe em fixtures
         // colocadas de propósito pelo gerador (ex.: stone_wall pode legitimamente ficar
         // sobre estrada/praça, como acontece na Pedreira).
-        if (mapKey === 'south' || mapKey === 'portovale' || mapKey === 'pedreira') {
+        if (mapKey === 'south' || mapKey === 'portovale' || mapKey === 'pedreira' || mapKey === 'floresta') {
           const scatterTypes = new Set(['tree', 'rock', 'bush', 'stump']);
           for (const okey of Object.keys(saved.objects)) {
             if (!scatterTypes.has(saved.objects[okey].type)) continue;
@@ -198,6 +200,7 @@ class Room {
       recipes: RECIPES,
       weapons: WEAPON_STATS,
       fish: FISH,
+      bugs: BUGS,
       you: { userId: p.userId, inv: this.inv(p.userId) },
       players: this.playersOnMap(m.key).map(q => this.publicPlayer(q)),
     };
@@ -324,6 +327,7 @@ class Room {
     this.state.time += MIN_PER_TICK;
     if (this.state.time >= DAY_END) { this.advanceDay(true); return; }
     this.tickCombat();
+    this.tickHealthRegen();
     // broadcast do relógio a cada ~10s
     if (Date.now() - this.lastTimeBroadcast > 10000) {
       this.lastTimeBroadcast = Date.now();
@@ -346,7 +350,7 @@ class Room {
     // pagamento da caixa de venda
     let payout = 0;
     for (const e of s.bin) {
-      const val = CROPS[e.item] ? CROPS[e.item].sellPrice : (RESOURCES[e.item] || FISH[e.item] || {}).sellPrice || 0;
+      const val = CROPS[e.item] ? CROPS[e.item].sellPrice : (RESOURCES[e.item] || FISH[e.item] || BUGS[e.item] || {}).sellPrice || 0;
       payout += val * e.qty;
     }
     const soldItems = s.bin;
@@ -388,10 +392,13 @@ class Room {
       }
     }
 
-    // energia
+    // energia + vida (dormir de propósito restaura os dois por completo — descanso de
+    // verdade; desmaiar de exaustão sem ter ido pra cama só restaura parcial, mesmo
+    // padrão de sempre da energia, agora espelhado na vida também).
     for (const p of this.players.values()) {
       const inv = this.inv(p.userId);
       inv.energy = passedOut && !p.sleeping ? Math.floor(ENERGY_MAX * 0.6) : ENERGY_MAX;
+      inv.health = passedOut && !p.sleeping ? Math.floor(inv.maxHealth * 0.6) : inv.maxHealth;
       p.sleeping = false;
     }
 
@@ -590,6 +597,20 @@ class Room {
       this.addItem(inv, fishId, 1);
       this.discover('fish', fishId);
       socket.emit('inv', inv);
+    } else if (type === 'catch') {
+      // Caça de insetos (Floresta, mapa novo) — mesmo espírito simplificado da pesca:
+      // clicar numa grama com a rede equipada resolve a captura na hora, sem minigame.
+      // Espécie sorteada entre as que combinam com a estação atual.
+      if (p.map !== 'floresta') return;
+      if (ground !== 0) return;
+      if (!inv.items.net) return;
+      if (!this.spend(inv, COST.catch, socket)) return;
+      const candidates = Object.entries(BUGS).filter(([, b]) => b.season == null || b.season === this.state.season);
+      if (!candidates.length) { socket.emit('inv', inv); return; }
+      const [bugId] = candidates[Math.floor(Math.random() * candidates.length)];
+      this.addItem(inv, bugId, 1);
+      this.discover('bugs', bugId);
+      socket.emit('inv', inv);
     }
   }
 
@@ -759,8 +780,27 @@ class Room {
       let dmg = 3 + Math.floor(depth / 3);
       if (inv.equipped === 'shield' && inv.items.shield) dmg = Math.max(1, Math.ceil(dmg * (1 - WEAPON_STATS.shield.block)));
       inv.health = Math.max(0, inv.health - dmg);
+      p.lastHitAt = Date.now(); // pausa a regeneração passiva por um tempo (ver tickHealthRegen)
       this.dirty = true;
       if (inv.health <= 0) { this.faintInMine(p, inv); continue; }
+      this.io.to(p.socketId).emit('inv', inv);
+    }
+  }
+
+  // Regeneração passiva de vida — BEM devagar de propósito (pedido explícito do usuário:
+  // "lentamente mesmo"), +1 a cada 5s, e só se o jogador não levou dano de contato
+  // recentemente (senão ficaria estranho regenerar "por baixo" enquanto ainda está
+  // encostado no monstro que está batendo nele).
+  tickHealthRegen() {
+    this._regenTick = (this._regenTick || 0) + 1;
+    if (this._regenTick % 5 !== 0) return;
+    const now = Date.now();
+    for (const p of this.players.values()) {
+      const inv = this.inv(p.userId);
+      if (inv.health >= inv.maxHealth) continue;
+      if (p.lastHitAt && now - p.lastHitAt < 4000) continue;
+      inv.health = Math.min(inv.maxHealth, inv.health + 1);
+      this.dirty = true;
       this.io.to(p.socketId).emit('inv', inv);
     }
   }
@@ -869,7 +909,7 @@ class Room {
     const inv = this.inv(p.userId);
     const have = inv.items[itemId] || 0;
     const qty = Math.max(1, Math.min(have, Math.floor(data.qty || 1)));
-    const sellable = CROPS[itemId] || RESOURCES[itemId] || FISH[itemId];
+    const sellable = CROPS[itemId] || RESOURCES[itemId] || FISH[itemId] || BUGS[itemId];
     if (!sellable || have < 1) return;
     this.addItem(inv, itemId, -qty);
     const entry = this.state.bin.find(e => e.item === itemId);

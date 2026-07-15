@@ -58,6 +58,7 @@ const RECIPES = {
   bow: { cost: { wood: 3, stone: 1 }, give: 'bow', qty: 1 },
   shield: { cost: { wood: 2, stone: 3 }, give: 'shield', qty: 1 },
   rod: { cost: { wood: 3, iron: 1 }, give: 'rod', qty: 1 },
+  net: { cost: { wood: 3, stone: 1 }, give: 'net', qty: 1 },
 };
 
 // Estatísticas de combate por arma. `range` em tiles (folga extra aplicada no cliente e
@@ -87,6 +88,21 @@ const FISH = {
   squid:   { water: 'ocean', season: 2, sellPrice: 70, tint: 0x8a5ca8 },
 };
 
+// Insetos: caçáveis na Floresta (mapa novo, ação 'catch') com a rede equipada, clicando
+// em qualquer tile de grama do mapa. Mesmo espírito simplificado da pesca v1 (sem
+// minigame — clique já resolve a captura na hora). `season` null = ano todo, senão só
+// na estação indicada. Borboleta/abelha reaproveitam sprites reais do pack (raros os
+// outros dois no repertório de bichos pequenos); joaninha/vagalume/grilo usam o mesmo
+// ícone genérico da borboleta — mesma solução simplificada já usada nos peixes.
+const BUGS = {
+  butterfly: { season: null, sellPrice: 18 },
+  bee:       { season: null, sellPrice: 16 },
+  ladybug:   { season: 0, sellPrice: 22 },
+  dragonfly: { season: 1, sellPrice: 26 },
+  cricket:   { season: 2, sellPrice: 20 },
+  firefly:   { season: null, sellPrice: 30 },
+};
+
 // Pedidos do quadro de recados: só itens sempre obteníveis (não presos à estação).
 const QUEST_POOL = [
   { item: 'wood', qty: 12 },
@@ -111,4 +127,4 @@ function stageOf(crop, daysGrown) {
   return Math.min(3, Math.floor((daysGrown / def.days) * 4));
 }
 
-module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };
+module.exports = { CROPS, RESOURCES, FOOD, FORAGE, RECIPES, WEAPON_STATS, FISH, BUGS, ORE_SPAWN, pickQuest, stageOf, CHICKEN_PRICE, MAX_CHICKENS };

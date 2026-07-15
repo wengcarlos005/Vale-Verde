@@ -377,4 +377,28 @@ df.ellipse([5, 7, 12, 11], fill=BELLY)                             # barriga cla
 df.rectangle([10, 5, 10, 5], fill=(20, 20, 20, 255))               # olho
 fish.resize((32, 32), Image.NEAREST).save(o("icons/item_fish.png"))
 
+# ---------- caça de insetos (fase nova do roadmap: mapa Floresta) ----------
+# Rede: sem sprite pronto no pack (mesmo caso da lança) — sintetizada no mesmo estilo/
+# paleta: cabo diagonal + aro + malha.
+net_icon = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+dn = ImageDraw.Draw(net_icon)
+dn.line([(2, 14), (8, 8)], fill=(58, 32, 18, 255), width=3)      # cabo (contorno escuro)
+dn.line([(2, 14), (8, 8)], fill=(122, 74, 43, 255), width=1)     # cabo (realce)
+dn.ellipse([6, 0, 15, 9], outline=(196, 168, 110, 255), width=2)  # aro
+dn.line([(8, 2), (13, 7)], fill=(230, 224, 200, 140), width=1)   # malha
+dn.line([(13, 2), (8, 7)], fill=(230, 224, 200, 140), width=1)
+dn.line([(10, 0), (11, 9)], fill=(230, 224, 200, 140), width=1)
+net_icon.resize((32, 32), Image.NEAREST).save(o("icons/tool_net.png"))
+
+# Inseto: reaproveita o sprite real de mundo da borboleta (já extraído acima como
+# decoração ambiente) como ícone — mesmo princípio já usado nos forrageáveis. As outras
+# 5 espécies não têm sprite dedicado no pack; reaproveitam esse MESMO ícone genérico
+# (mesma solução simplificada já usada nos peixes), diferenciadas só por nome/preço.
+# BUG REAL achado aqui: Butterfly.png não é "4 frames de 16x16" como um comentário antigo
+# assumia — é 8 frames de 16x8 (bbox por scan de alpha confirmou bandas a cada 8px, não
+# 16px). Um crop de 16x16 pegava 2 frames empilhados (borboleta "dupla"/borrada). Ícone
+# usa só o frame 0 (16x8); a animação decorativa em game.js também foi corrigida.
+bug_icon = load(p("Animals", "Butterfly", "Butterfly.png")).crop((0, 0, 16, 8))
+bug_icon.resize((32, 32), Image.NEAREST).save(o("icons/item_bug.png"))
+
 print("assets ok:", len([f for r, _, fs in os.walk(OUT) for f in fs]))

@@ -61,6 +61,7 @@
   "craft.bowDesc": "ranged weapon, long range",
   "craft.shieldDesc": "reduces damage taken from monsters while equipped",
   "craft.rodDesc": "select it and click on water (pond or ocean) to fish",
+  "craft.netDesc": "select it and click on grass in the Forest to catch bugs",
 
   "quest.title": "📋 Notice Board",
   "quest.hint": "Deliver what's requested for coins — a new request appears afterward.",
@@ -73,6 +74,7 @@
   "progress.crops": "🌾 Crops harvested",
   "progress.minerals": "💎 Ores mined",
   "progress.fish": "🐟 Fish caught",
+  "progress.bugs": "🦋 Bugs caught",
   "progress.monsters": "⚔️ Monsters defeated",
   "progress.mine": "⛏️ Deepest mine level",
   "progress.mineHint": "The mine has 100 levels — the deeper you go, the rarer the ore and the tougher the monsters.",
@@ -159,6 +161,7 @@
   "tool.bow": "Bow and Arrow",
   "tool.shield": "Shield",
   "tool.rod": "Fishing Rod",
+  "tool.net": "Bug Net",
 
   "fish.carp": "Carp",
   "fish.trout": "Trout",
@@ -166,6 +169,13 @@
   "fish.sardine": "Sardine",
   "fish.tuna": "Tuna",
   "fish.squid": "Squid",
+
+  "bug.butterfly": "Butterfly",
+  "bug.bee": "Bee",
+  "bug.ladybug": "Ladybug",
+  "bug.dragonfly": "Dragonfly",
+  "bug.cricket": "Cricket",
+  "bug.firefly": "Firefly",
 
   "hud.day": "Day {day} — {season}",
   "interact.sleep": "Sleep (E)",

@@ -14,6 +14,7 @@ const TILE = 16;
 const PV_W = 60, PV_H = 36;
 const SOUTH_W = 100, SOUTH_H = 46;
 const PED_W = 50, PED_H = 36;
+const FLORESTA_W = 56, FLORESTA_H = 48;
 
 function mulberry32(seed) {
   return function () {
@@ -345,6 +346,34 @@ function generatePedreira(seed) {
   return { ground, objects, w: PED_W, h: PED_H, spawn: [25, 2] };
 }
 
+// ---------------- Floresta — tela própria, entrada na borda sul (vindo da fazenda) ----------------
+// Fase nova do roadmap: objetivo próprio (caça de insetos — ver BUGS em crops.js e a
+// ação 'catch' em rooms.js) num mapa dedicado, mesmo padrão de "1 fase = 1 mapa + 1
+// objetivo novo" que south/pedreira já estabeleceram (praia/porto e mineração). Entra
+// pela saída norte do overworld (`rect(30,0,32,13)`, já existia sem uso — dirt() deixa a
+// borda DE CIMA passar de propósito, então nem precisou de openEdge do lado da fazenda).
+// Mata densa com uma clareira central (mais grama aberta = mais fácil caçar inseto ali).
+function generateFloresta(seed) {
+  const rnd = mulberry32(seed ^ 0x464c4f52);
+  const ground = [];
+  for (let y = 0; y < FLORESTA_H; y++) ground.push(new Array(FLORESTA_W).fill(0));
+  const { ellipse, rect } = terrainTools(ground, FLORESTA_W, FLORESTA_H);
+  rect(27, 24, 29, FLORESTA_H - 1);     // trilha da clareira até a borda sul
+  ellipse(28, 22, 10, 7);               // clareira central (meadow)
+  openEdge(ground, FLORESTA_W, FLORESTA_H, 27, FLORESTA_H - 2, 29, FLORESTA_H - 1); // sul → fazenda
+
+  const objects = {};
+  const treeVariant = () => (rnd() < 0.6 ? 'oak' : 'birch');
+  borderTrees(ground, objects, FLORESTA_W, FLORESTA_H, treeVariant);
+  scatterOnMap('floresta', ground, objects, FLORESTA_W, FLORESTA_H, rnd, [
+    [130, () => ({ type: 'tree', variant: treeVariant(), hp: 5 })],
+    [45, () => ({ type: 'bush', hp: 2 })],
+    [18, () => ({ type: 'stump', hp: 2 })],
+    [10, () => ({ type: 'rock', hp: 3 })],
+  ]);
+  return { ground, objects, w: FLORESTA_W, h: FLORESTA_H, spawn: [28, FLORESTA_H - 3] };
+}
+
 // ---------------- telas separadas (mina) ----------------
 // A mina é uma sequência de telas próprias (mine:1, mine:2, ...), entradas pela Pedreira.
 // Cada nível é uma sala de caverna com escada pra descer (minério mais raro/valioso
@@ -612,6 +641,7 @@ const EDGE_LINKS = {
   overworld: [
     { at: [91, 12], kind: 'edge_east', to: 'portovale', toSpawn: [2, 18] },
     { at: [65, HEIGHT - 1], kind: 'edge_south', to: 'south', toSpawn: [50, 2] },
+    { at: [31, 0], kind: 'edge_north', to: 'floresta', toSpawn: [28, FLORESTA_H - 3] },
   ],
   portovale: [
     { at: [0, 18], kind: 'edge_west', to: 'overworld', toSpawn: [89, 12] },
@@ -622,6 +652,9 @@ const EDGE_LINKS = {
   ],
   pedreira: [
     { at: [25, 0], kind: 'edge_north', to: 'south', toSpawn: [2, 20] },
+  ],
+  floresta: [
+    { at: [28, FLORESTA_H - 1], kind: 'edge_south', to: 'overworld', toSpawn: [31, 3] },
   ],
 };
 
@@ -666,7 +699,7 @@ function initialFarmState(seed) {
     // jogador individual — é cooperativo, o progresso é da fazenda toda) colhe um
     // cultivo, minera um minério ou derrota um monstro. maxDepth = nível mais fundo já
     // alcançado na mina (não precisa ter sobrevivido, só ter chegado lá).
-    discovered: { crops: [], minerals: [], monsters: [], fish: [], maxDepth: 0 },
+    discovered: { crops: [], minerals: [], monsters: [], fish: [], bugs: [], maxDepth: 0 },
   };
   scatterForage(state, 25, mulberry32(seed ^ 0x9e37));
   return state;
@@ -692,8 +725,9 @@ function scatterForage(state, n, rnd = Math.random) {
 }
 
 module.exports = {
-  WIDTH, HEIGHT, TILE, PV_W, PV_H, SOUTH_W, SOUTH_H, PED_W, PED_H, BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA,
-  generateOverworld, generatePortoVale, generateSouth, generatePedreira, initialFarmState,
+  WIDTH, HEIGHT, TILE, PV_W, PV_H, SOUTH_W, SOUTH_H, PED_W, PED_H, FLORESTA_W, FLORESTA_H,
+  BUILDINGS, BUILDING_DEFS, POND, FARMLAND, SPAWN, PRAIA,
+  generateOverworld, generatePortoVale, generateSouth, generatePedreira, generateFloresta, initialFarmState,
   inBuildingVisual, buildingVisual, buildingSpotFree, collisionRect, coopYard, scatterForage,
   inPlayerBuildingOrYard, hasNearbyContent, makeMineLevel, makeInterior, worldEntrances, depthOf,
 };
