@@ -229,6 +229,23 @@ class Room {
             this.dirty = true;
           }
         }
+        // Migração/reparo: um monstro pode ter vagado (chase/wander) pra CIMA de uma
+        // entrada (escada/atalho) — bloqueia o tile fisicamente (monstro é obstáculo de
+        // colisão de verdade, ver blockedAt no cliente) E esconde o sprite da escada por
+        // baixo do próprio monstro. Usuário: "não tem escada pra sair" — a escada existia
+        // (inclusive já revelada), só estava trancada atrás de um monstro parado em cima
+        // dela. Reposiciona de volta pra casa (hx,hy — sempre livre, a geração reserva a
+        // vizinhança das entradas). Fix definitivo (não deve mais acontecer daqui pra
+        // frente): tickMonsters agora exclui tiles de entrada do movimento, ver isFree.
+        if (mapKey.startsWith('mine:') && saved.monsters && entrances && entrances.length) {
+          const entranceTiles = new Set(entrances.map((e) => `${e.at[0]},${e.at[1]}`));
+          for (const mo of Object.values(saved.monsters)) {
+            if (entranceTiles.has(`${mo.x},${mo.y}`)) {
+              mo.x = mo.hx ?? mo.x; mo.y = mo.hy ?? mo.y;
+              this.dirty = true;
+            }
+          }
+        }
         // Migração: terreno "ao ar livre" é sempre regerado do código atual (não salvo),
         // então se a geração mudar (praia cresceu, estrada mudou de forma...) um objeto
         // ESPALHADO (árvore/pedra/arbusto/toco) pode ficar preso em cima de areia/água/
@@ -1035,8 +1052,15 @@ class Room {
       const monsters = Object.values(m.monsters);
       if (!monsters.length) continue;
       const playersHere = this.playersOnMap(mapKey);
+      // BUG REAL achado testando (usuário: "não tem escada pra sair"): monstro é obstáculo
+      // de colisão de verdade (client blockedAt) e nada impedia ele de vagar/perseguir até
+      // ficar EM CIMA do tile de uma entrada (escada/atalho) — bloqueava fisicamente e
+      // escondia o sprite da escada por baixo do próprio monstro. Exclui os tiles de
+      // entrada do movimento, pra nunca mais acontecer (reparo de mapas já quebrados fica
+      // na migração de mapOf, que reposiciona qualquer monstro já preso numa entrada).
+      const entranceTiles = new Set((m.entrances || []).map((e) => `${e.at[0]},${e.at[1]}`));
       const isFree = (x, y, mon) =>
-        m.ground[y] && m.ground[y][x] === 3 && !m.objects[`${x},${y}`] &&
+        m.ground[y] && m.ground[y][x] === 3 && !m.objects[`${x},${y}`] && !entranceTiles.has(`${x},${y}`) &&
         !monsters.some((o) => o !== mon && o.x === x && o.y === y) &&
         !playersHere.some((pl) => Math.round(pl.x / W.TILE) === x && Math.round(pl.y / W.TILE) === y);
       // BUG REAL achado testando: com só eixo-primário + eixo-secundário como opções, um
