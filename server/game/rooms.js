@@ -199,11 +199,34 @@ class Room {
         // Migração: níveis de mina gerados antes da correção acima podem ter minério
         // preso no MESMO tile de um monstro (sprites empilhados, aparência de cenário
         // cortado). Limpa esse minério — o monstro fica, o tile de minério é perdido,
-        // mas é só 1 tile e resolve o visual quebrado em mapas já salvos.
+        // mas é só 1 tile e resolve o visual quebrado em mapas já salvos. NUNCA apaga um
+        // hidesStairs (bug real reportado: "limpei o nível todo e não tem escada" — essa
+        // limpeza rodava em TODO load do mapa, sem essa exceção apagava a escada escondida
+        // pra sempre se ela calhasse de estar no tile de um monstro, sem deixar nenhum
+        // outro objeto pra revelar a saída).
         if (mapKey.startsWith('mine:') && saved.monsters) {
           for (const mo of Object.values(saved.monsters)) {
             const okey = `${mo.x},${mo.y}`;
-            if (saved.objects[okey]) { delete saved.objects[okey]; this.dirty = true; }
+            if (saved.objects[okey] && !saved.objects[okey].hidesStairs) { delete saved.objects[okey]; this.dirty = true; }
+          }
+        }
+        // Auto-reparo: níveis onde a escada escondida já foi perdida (pela limpeza acima,
+        // antes dessa correção, ou qualquer outra causa) ficavam travados pra sempre —
+        // stairsRevealed nunca vira true e não sobra nenhum objeto hidesStairs pra minerar.
+        // Se acontecer, escolhe outro minério ao acaso do nível pra virar o novo segredo;
+        // se não sobrou minério NENHUM (usuário já limpou o nível todo), libera a escada
+        // direto — não tem mais onde esconder.
+        if (mapKey.startsWith('mine:') && !saved.stairsRevealed) {
+          const hasHiddenOre = Object.values(saved.objects).some((o) => o.hidesStairs);
+          if (!hasHiddenOre) {
+            const oreKeys = Object.keys(saved.objects).filter((k) => saved.objects[k].type === 'ore');
+            if (oreKeys.length) {
+              const secretKey = oreKeys[Math.floor(Math.random() * oreKeys.length)];
+              saved.objects[secretKey].hidesStairs = true;
+            } else {
+              saved.stairsRevealed = true;
+            }
+            this.dirty = true;
           }
         }
         // Migração: terreno "ao ar livre" é sempre regerado do código atual (não salvo),
